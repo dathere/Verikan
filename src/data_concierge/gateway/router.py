@@ -3413,7 +3413,7 @@ class GitHubSettingsRequest(BaseModel):
 
     token: str = Field(default="", description="GitHub personal access token")
     repo: str = Field(
-        default="dathere/data-concierge-notebooks", description="GitHub repo (owner/name)"
+        default="", description="GitHub repo (owner/name)"
     )
     branch: str = Field(default="main", description="Target branch")
     drafts_folder: str = Field(default="drafts", description="Folder for draft notebooks")

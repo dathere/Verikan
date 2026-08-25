@@ -192,7 +192,9 @@ class Settings(BaseSettings):
     # settings exist). Admin-panel edits override these values until
     # github_settings.json is cleared.
     github_token: SecretStr = Field(default=SecretStr(""))
-    github_repo: str = "dathere/data-concierge-notebooks"
+    # Empty by default: publishing stays inactive until an operator names
+    # their own repo (is_publishing_active requires repo AND token).
+    github_repo: str = ""
     github_branch: str = "main"
     github_drafts_folder: str = "drafts"
     github_verified_folder: str = "verified"

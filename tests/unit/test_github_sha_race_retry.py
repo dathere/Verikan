@@ -6,7 +6,7 @@ invalidated by the winner. The helper should detect that, refetch the SHA,
 and retry once. These tests cover the common cases.
 
 See issue #46 follow-ups, item A in
-https://github.com/dathere/data-concierge/issues/46#issuecomment-4556793295.
+an earlier production incident.
 """
 
 from __future__ import annotations
