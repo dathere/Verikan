@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     notebook_verification_timeout_seconds: int = 180
     notebook_verification_cell_timeout_seconds: int = 60
 
-    # Notebook review (#131, third signal) — an adversarial "roborev-style"
+    # Notebook review (third signal) — an adversarial, static
     # static review of each generated notebook's method: does the code
     # actually derive the numbers the answer claims, are the datasets and
     # citations sound, is anything hardcoded that should be computed. Runs

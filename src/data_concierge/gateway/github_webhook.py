@@ -299,9 +299,9 @@ async def _handle_pull_request_event(
             detail="pull_request event payload must be a JSON object",
         )
 
-    # Pause guard — same retry-vs-pause distinction as push (roborev
-    # #2569, #2572). A fail-closed settings load is transient; an
-    # intentional admin pause is steady state.
+    # Pause guard — same retry-vs-pause distinction as push. A
+    # fail-closed settings load is transient; an intentional admin
+    # pause is steady state.
     if not is_publishing_active(gh_settings):
         if settings_status == "fail_closed":
             logger.error(

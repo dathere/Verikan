@@ -13,7 +13,7 @@ are configurable:
 * ``notebook_results_template`` — the results/answer markdown cell near the
   bottom of every generated notebook.
 * ``notebook_review_template`` — the system prompt for the adversarial
-  roborev-style method review that runs on every generated notebook (#131,
+  adversarial method review that runs on every generated notebook (#131,
   ``agents/notebook_reviewer.py``). This template plays the role of
   the reviewer's guidelines: edit it to teach the reviewer
   new defect classes.
@@ -266,7 +266,7 @@ The Data Concierge evaluates the reliability of its answer using multiple factor
 {confidence_block}"""
 
 # System prompt for the adversarial notebook method review (#131, third
-# signal — the roborev role applied to generated notebooks). No placeholders:
+# signal — adversarial review applied to generated notebooks). No placeholders:
 # the question, answer, and notebook go in the user message at review time.
 # NOTE: this is a ``str.format`` template like the others, so literal braces
 # would need doubling — keep the guidelines brace-free.

@@ -1037,7 +1037,7 @@ async def admin_list_notebook_reviews(
     """Notebook verification + adversarial review results (admin only).
 
     One record per generated notebook: whether it executed, whether its
-    output reconciles with the answer, the roborev-style method-review
+    output reconciles with the answer, the adversarial method-review
     findings, and how the combined verdict moved the confidence score.
     """
     from data_concierge.gateway.notebook_verification import (

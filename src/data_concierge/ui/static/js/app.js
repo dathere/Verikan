@@ -1369,7 +1369,7 @@ async function pollNotebookVerification(chatId, queryId, attempt = 0) {
     msg.confidenceUnavailable = result.confidence_unavailable || null;
     msg.confidenceExplanation = result.confidence_explanation || null;
     // Keep the adversarial review verdict so the confidence panel can show
-    // what the roborev-style check found (#131 third signal).
+    // what the adversarial method review found (third signal).
     if (result.review && result.review.reviewed) {
         msg.notebookReview = {
             summary: result.review.summary || null,
@@ -2263,7 +2263,7 @@ function renderConfidenceBars(bd, unavailable, explanation, review) {
         ? `<div class="conf-caption conf-caption-partial"><i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>${escapeHtml(explanation)}</div>`
         : '<div class="conf-caption"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>How this confidence was scored</div>';
 
-    // Adversarial review verdict (#131 third signal) — what the roborev-style
+    // Adversarial review verdict (third signal) — what the method
     // method check found once it ran on the generated notebook.
     let reviewHtml = '';
     if (review) {

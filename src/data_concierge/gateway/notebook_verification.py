@@ -2,7 +2,7 @@
 
 Issue #131. ``agents/notebook_verifier`` knows how to execute a notebook and
 reconcile it against the answer; ``agents/notebook_reviewer`` knows how to
-adversarially review its method (the roborev signal); this module decides
+adversarially review its method (the review signal); this module decides
 *when* both happen and where the combined verdict lives.
 
 Verification runs **after** the answer is returned. Executing a notebook takes

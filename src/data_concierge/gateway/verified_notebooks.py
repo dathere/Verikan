@@ -1642,8 +1642,8 @@ async def bootstrap_answers_from_github() -> dict[str, Any]:
             # Update path: refresh GitHub-owned fields, preserve
             # local-only operational state. Round-trip through the
             # model so type-corrupt fields route to skipped_bad_metadata
-            # instead of corrupting the index (same pattern as roborev
-            # #2538 for notebooks).
+            # instead of corrupting the index (same pattern used for
+            # notebooks).
             try:
                 candidate = dict(existing_entry)
                 # Refresh every field that lives on GitHub.
