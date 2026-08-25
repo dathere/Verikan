@@ -404,13 +404,6 @@ development.
 
 ---
 
-## A note on issue references
-
-Comments and docstrings cite issue numbers like `(#131)` or `issue #104`. Those refer to the
-private tracker this project was developed in before it was open sourced — they're kept
-because they mark *why* a piece of code exists, but they don't correspond to issues in this
-repository.
-
 ---
 
 <div align="center">
