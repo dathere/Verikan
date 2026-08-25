@@ -107,7 +107,7 @@ The server listens on **http://localhost:8501** (override with the `PORT` env va
 
 ### 5. Log in
 
-A fresh install seeds one local account:
+Click **Login** in the top right and sign in with the account a fresh install seeds:
 
 - **Username:** `user`
 - **Password:** `datHere@123`, or whatever you set as `USER_PASSWORD` in `.env` before the
@@ -252,10 +252,16 @@ analysis rather than describing it.
 
 ```bash
 pytest                                  # run the test suite
-ruff check src/ tests/ scripts/         # lint
+ruff check src/ tests/ scripts/         # lint  — currently clean
 ruff format src/ tests/ scripts/        # format
-mypy src/                               # type check
+mypy src/                               # type check — see note below
 ```
+
+`ruff check` passes. `ruff format` and `mypy src/` both currently report a backlog
+inherited from pre-open-source development (formatting drift across a number of files, and
+type errors under mypy's strict mode). Neither is wired up as a CI gate yet. If you are
+sending a patch, keep `ruff check` clean and match the style of the code around you rather
+than reformatting whole files — a repo-wide reformat would bury real changes in noise.
 
 Tests are plain pytest with `asyncio_mode = "auto"` — async tests need no decorator. The
 suite uses real classifiers and state objects rather than mocks, and notebook-verification

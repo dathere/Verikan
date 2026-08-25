@@ -252,6 +252,10 @@ function setupEventListeners() {
     });
 
     // Send message — Enter sends, Shift+Enter inserts a newline.
+    // Username/password sign-in (the only method when social login is off)
+    const passwordLoginForm = document.getElementById('passwordLoginForm');
+    if (passwordLoginForm) passwordLoginForm.addEventListener('submit', submitPasswordLogin);
+
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('keydown', (e) => {
         // Don't intercept the Enter that confirms an IME composition candidate
@@ -437,9 +441,42 @@ function updateAuth0Button() {
     // Show/hide the whole social-login button group (GitHub + LinkedIn).
     const group = document.getElementById('auth0Buttons');
     if (group) group.classList.toggle('d-none', !_auth0Enabled);
-    // Shown only when social login is unavailable (no other sign-in method exists).
-    const fallback = document.getElementById('loginNoSocial');
-    if (fallback) fallback.classList.toggle('d-none', _auth0Enabled);
+    // The "or" divider only makes sense when both methods are offered.
+    const divider = document.getElementById('loginDivider');
+    if (divider) divider.classList.toggle('d-none', !_auth0Enabled);
+}
+
+// Username/password sign-in. Always available: a self-hosted or local install
+// has no social provider configured, and this is the only way in.
+async function submitPasswordLogin(event) {
+    if (event) event.preventDefault();
+    const btn = document.getElementById('passwordLoginBtn');
+    const errorEl = document.getElementById('loginError');
+    const username = (document.getElementById('loginUsername') || {}).value || '';
+    const password = (document.getElementById('loginPassword') || {}).value || '';
+    if (errorEl) errorEl.classList.add('d-none');
+    if (btn) { btn.disabled = true; btn.classList.add('disabled'); }
+    try {
+        const response = await fetch(`${API_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ username, password })
+        });
+        if (!response.ok) {
+            let detail = 'Sign in failed. Check your username and password.';
+            try { const d = await response.json(); if (d.detail) detail = d.detail; } catch (e) { /* keep default */ }
+            throw new Error(detail);
+        }
+        // Cookie is set; reload so every view picks up the authenticated session.
+        window.location.reload();
+    } catch (error) {
+        if (errorEl) {
+            errorEl.textContent = error.message;
+            errorEl.classList.remove('d-none');
+        }
+        if (btn) { btn.disabled = false; btn.classList.remove('disabled'); }
+    }
 }
 
 // Start the Auth0 flow. Passing a connection ("github" / "linkedin") sends the
@@ -483,7 +520,9 @@ function showLoginModal(pendingQuery = null) {
     // Focus the social sign-in button once the modal is shown.
     modalEl.addEventListener('shown.bs.modal', () => {
         const btn = document.getElementById('auth0LoginBtn');
-        if (btn && _auth0Enabled) btn.focus();
+        if (btn && _auth0Enabled) { btn.focus(); return; }
+        const userField = document.getElementById('loginUsername');
+        if (userField) userField.focus();
     }, { once: true });
 }
 
@@ -2381,6 +2420,7 @@ window.toggleCell = toggleCell;
 window.askFollowUp = askFollowUp;
 window.submitQuickAnswerForReview = submitQuickAnswerForReview;
 window.showLoginModal = showLoginModal;
+window.submitPasswordLogin = submitPasswordLogin;
 window.doLogout = doLogout;
 window.toggleSidebar = toggleSidebar;
 window.closeSidebarMobile = closeSidebarMobile;

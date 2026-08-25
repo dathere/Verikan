@@ -326,9 +326,19 @@
                             <i class="bi bi-linkedin me-2"></i>Sign in with LinkedIn
                         </button>
                     </div>
-                    <div id="loginNoSocial" class="alert alert-warning small mt-3 mb-0 d-none">
-                        Social sign-in is not configured on this server.
-                    </div>
+                    <div id="loginDivider" class="text-muted small my-3 d-none">or</div>
+
+                    <form id="passwordLoginForm" class="text-start">
+                        <label for="loginUsername" class="form-label small mb-1">Username</label>
+                        <input type="text" class="form-control form-control-sm mb-2" id="loginUsername"
+                               autocomplete="username" required>
+                        <label for="loginPassword" class="form-label small mb-1">Password</label>
+                        <input type="password" class="form-control form-control-sm mb-3" id="loginPassword"
+                               autocomplete="current-password" required>
+                        <button type="submit" id="passwordLoginBtn" class="btn btn-primary w-100">
+                            <i class="bi bi-box-arrow-in-right me-2" aria-hidden="true"></i>Sign in
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
