@@ -196,7 +196,7 @@ unavailable.
 # hardcoded in ``notebook_generator._create_title_cell`` /
 # ``_create_results_cell``, so generated notebooks are unchanged until an
 # admin edits these.
-DEFAULT_NOTEBOOK_HEADER_TEMPLATE = """# 🔬  AI Data Concierge - Reproducible Analysis
+DEFAULT_NOTEBOOK_HEADER_TEMPLATE = """# 🔬 Verikan — Reproducible Analysis
 
 <a href="https://colab.research.google.com/" target="_parent">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
@@ -219,7 +219,7 @@ DEFAULT_NOTEBOOK_HEADER_TEMPLATE = """# 🔬  AI Data Concierge - Reproducible A
 
 ## 📖 How to Use This Notebook
 
-This notebook reproduces the exact analysis performed by the ** AI Data Concierge**.
+This notebook reproduces the exact analysis performed by **Verikan**.
 Follow the steps below to verify, modify, or extend the analysis.
 
 ### ✅ Quick Start

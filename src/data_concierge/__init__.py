@@ -1,3 +1,3 @@
-""" AI Data Concierge - An intelligent assistant for federal statistical data."""
+"""Verikan — the verified Data Concierge."""
 
 __version__ = "0.1.0"

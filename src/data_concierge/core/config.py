@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     )
 
     # Application
-    app_name: str = " AI Data Concierge"
+    app_name: str = "Verikan"
     app_version: str = "0.1.0"
     environment: Literal["development", "staging", "production"] = "development"
     debug: bool = False
