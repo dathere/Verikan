@@ -1,0 +1,80 @@
+[
+  {
+    "id": "census-data-api",
+    "name": "U.S. Census Bureau Data API MCP",
+    "description": "Official U.S. Census Bureau Data API via MCP (SQLite-backed). Tools: list-datasets, fetch-dataset-geography, fetch-aggregate-data, resolve-geography-fips, search-data-tables, visualize-census.",
+    "transport": "streamable_http",
+    "command": "",
+    "args": [],
+    "env": {},
+    "working_dir": "",
+    "url": "http://localhost:8081/mcp",
+    "enabled": false,
+    "auto_connect": false,
+    "created_at": "2026-07-02T00:00:00.000000",
+    "categories": [
+      "demographics",
+      "population",
+      "income",
+      "housing",
+      "census"
+    ],
+    "keywords": [
+      "census",
+      "population",
+      "demographics",
+      "acs",
+      "american community survey",
+      "fips",
+      "geography",
+      "state",
+      "county",
+      "city",
+      "tract",
+      "income",
+      "poverty",
+      "housing",
+      "education",
+      "census api"
+    ]
+  },
+  {
+    "id": "fbi-crime-data",
+    "name": "FBI Crime Data Explorer MCP",
+    "description": "FBI Crime Data Explorer (UCR/NIBRS) via MCP. Tools: get_summarized_crime_data, get_nibrs_data, get_arrest_data, get_crime_trends, get_nibrs_estimation, get_hate_crime_data, get_expanded_homicide_data, get_expanded_property_data, get_police_employment, get_leoka_data, get_lesdc_data, get_use_of_force_data, get_cde_homepage_summary, lookup_agency, get_reference_data.",
+    "transport": "sse",
+    "command": "",
+    "args": [],
+    "env": {},
+    "working_dir": "",
+    "url": "http://localhost:8000/mcp",
+    "enabled": false,
+    "auto_connect": false,
+    "created_at": "2026-07-02T00:00:00.000000",
+    "categories": [
+      "crime",
+      "law enforcement",
+      "justice",
+      "public safety"
+    ],
+    "keywords": [
+      "fbi",
+      "crime",
+      "ucr",
+      "nibrs",
+      "arrests",
+      "hate crime",
+      "homicide",
+      "property crime",
+      "violent crime",
+      "police",
+      "law enforcement",
+      "leoka",
+      "use of force",
+      "offense",
+      "robbery",
+      "burglary",
+      "assault"
+    ]
+  }
+]

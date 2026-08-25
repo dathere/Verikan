@@ -1,0 +1,161 @@
+# Docker Compose for local development and testing
+# Run: docker-compose up --build
+#
+# Make sure to create a .env file with your API keys (copy from .env.example)
+
+
+services:
+  data-concierge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env  # Load all variables from .env file
+    environment:
+      # Server config (override defaults)
+      - PORT=8080
+      - HOST=0.0.0.0
+      - ENVIRONMENT=development
+
+      # Required: Anthropic API Key
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+
+      # Federal Data Source API Keys (for live data)
+      - BLS_API_KEY=${BLS_API_KEY:-}
+      - CENSUS_API_KEY=${CENSUS_API_KEY:-}
+      - BEA_API_KEY=${BEA_API_KEY:-}
+      - FRED_API_KEY=${FRED_API_KEY:-}
+
+      # Data Commons
+      - DATA_COMMONS_API_KEY=${DATA_COMMONS_API_KEY:-}
+
+      # CKAN
+      - CKAN_URL=${CKAN_URL:-https://data.dathere.com}
+      - CKAN_API_KEY=${CKAN_API_KEY:-}
+
+      # Pinecone (for CKAN semantic search)
+      - PINECONE_API_KEY=${PINECONE_API_KEY:-}
+      - PINECONE_INDEX_NAME=${PINECONE_INDEX_NAME:-ckan-dathere-index}
+      - PINECONE_NAMESPACE=${PINECONE_NAMESPACE:-ckan-namespace}
+
+      # Redis (optional caching)
+      - REDIS_HOST=${REDIS_HOST:-}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+
+    volumes:
+      # Persist notebooks and data between restarts
+      - ./notebooks:/app/notebooks
+      - ./data:/app/data
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # Fair Store (#133): a local CKAN holding verified metadata, data
+  # schematics and ontologies.
+  #
+  # This is the structured, deterministic half of the hybrid storage
+  # design intent: CKAN owns canonical dataset
+  # records, schemas, column-level data dictionaries, provenance and
+  # verification status, and exposes them over an API other programs can
+  # call. Pinecone keeps the fuzzy half — embeddings for semantic recall —
+  # and points back at CKAN identifiers rather than duplicating the truth.
+  #
+  # Start it with the fairstore profile so a plain `docker compose up`
+  # stays lightweight:
+  #     docker compose --profile fairstore up
+  # then open http://localhost:5001 (host 5001 -> container 5000; macOS
+  # reserves 5000 for AirPlay).
+  #
+  # First run: create an admin and an API token with
+  #     docker compose exec fairstore ckan -c /srv/app/ckan.ini sysadmin add admin
+  # then set CKAN_URL / CKAN_API_KEY for the app.
+  # ---------------------------------------------------------------------
+  fairstore:
+    profiles: ["fairstore"]
+    image: ckan/ckan-dev:2.10
+    platform: linux/amd64
+    depends_on:
+      fairstore-db:
+        condition: service_healthy
+      fairstore-solr:
+        condition: service_started
+    ports:
+      - "5001:5000"
+    environment:
+      - CKAN_SITE_URL=http://localhost:5000
+      # Credentials must match the users the postgres image's init scripts
+      # create (see fairstore-db below): ckan / ckan_datastore_write /
+      # ckan_datastore_read.
+      - CKAN_SQLALCHEMY_URL=postgresql://ckan:ckan@fairstore-db/ckan
+      - CKAN_DATASTORE_WRITE_URL=postgresql://ckan_datastore_write:datastore@fairstore-db/datastore
+      - CKAN_DATASTORE_READ_URL=postgresql://ckan_datastore_read:datastore@fairstore-db/datastore
+      - CKAN_SOLR_URL=http://fairstore-solr:8983/solr/ckan
+      - CKAN__PLUGINS=envvars datastore
+    volumes:
+      - fairstore_data:/var/lib/ckan
+    # The published ckan-dev:2.10 start script hardcodes the server binary as
+    # /usr/local/bin/ckan, but the image installs it at /usr/bin/ckan, so the
+    # dev server exits 127 in a loop. The prerun (config, db init) uses the
+    # binary via PATH and works; only that final line is wrong. Symlink the
+    # expected path, then hand off to the stock start script unchanged.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "ln -sf /usr/bin/ckan /usr/local/bin/ckan && exec /srv/app/start_ckan_development.sh"
+    restart: unless-stopped
+
+  fairstore-db:
+    profiles: ["fairstore"]
+    # Plain Postgres, not ckan/ckan-postgres-dev — that image is a CKAN test
+    # fixture with hardcoded ckan_test/datastore_test names that ignores
+    # config. init-db.sh creates exactly the users and databases CKAN needs.
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - fairstore_db:/var/lib/postgresql/data
+      - ./docker/fairstore/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  fairstore-solr:
+    profiles: ["fairstore"]
+    image: ckan/ckan-solr:2.10-solr9
+    platform: linux/amd64
+    volumes:
+      - fairstore_solr:/var/solr
+    restart: unless-stopped
+
+  # Optional: Redis for caching (uncomment if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  fairstore_data:
+  fairstore_db:
+  fairstore_solr:
+  # redis_data:

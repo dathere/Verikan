@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ landing.title }}{% if landing.tagline %} · {{ landing.tagline }}{% endif %}</title>
+    <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg?v=20260713-redesign">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650;700;750&display=swap" rel="stylesheet">
+    <link id="hljs-theme-dark" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" rel="stylesheet" disabled>
+    <link id="hljs-theme-light" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css" rel="stylesheet">
+    <link href="/static/css/style.css?v=20260713-redesign" rel="stylesheet">
+    <script>
+        // Apply saved theme immediately to prevent flash (light is the default)
+        (function() {
+            const saved = localStorage.getItem('dc-theme') || 'light';
+            document.documentElement.setAttribute('data-bs-theme', saved);
+            const dark = document.getElementById('hljs-theme-dark');
+            const light = document.getElementById('hljs-theme-light');
+            // links not yet in DOM during head exec for some browsers; handled again in app.js
+        })();
+    </script>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar fixed-top">
+        <div class="container-fluid px-0">
+            <div class="d-flex align-items-center gap-2">
+                <button id="sidebarToggle" class="icon-btn" type="button"
+                        aria-label="Toggle conversations sidebar" title="Toggle sidebar"
+                        onclick="toggleSidebar()">
+                    <i class="bi bi-layout-sidebar" aria-hidden="true"></i>
+                </button>
+                <a class="navbar-brand d-flex align-items-center mb-0" href="/">
+                    <img src="{{ landing.logo_url }}" alt="Verikan" class="dc-logo">
+                    <span class="brand-lockup">
+                        <span class="brand-name">Verikan</span>
+                        <span class="brand-sub">Data Concierge</span>
+                    </span>
+                    {% if landing.show_beta_badge %}<span class="dc-tag dc-tag-beta">Beta</span>{% endif %}
+                </a>
+            </div>
+            <div class="nav-cluster">
+                <span id="authStatus" class="text-muted small d-none auth-chip">
+                    <i class="bi bi-person-check-fill text-success me-1"></i>Logged in
+                </span>
+                <button id="themeToggle" class="theme-toggle" type="button"
+                        aria-label="Toggle light or dark mode" title="Toggle light/dark mode"
+                        onclick="toggleTheme()">
+                    <i class="bi bi-moon-stars" aria-hidden="true"></i>
+                </button>
+                <a href="/docs" class="btn btn-sm btn-outline-secondary" title="Open the user guide">
+                    <i class="bi bi-question-circle me-1" aria-hidden="true"></i><span class="btn-label">Help</span>
+                </a>
+                <a href="/admin" id="adminNavBtn" class="btn btn-sm btn-outline-secondary d-none"
+                   title="Open the admin dashboard">
+                    <i class="bi bi-speedometer2 me-1" aria-hidden="true"></i><span class="btn-label">Admin</span>
+                </a>
+                <button id="loginBtn" class="btn btn-sm btn-primary" onclick="showLoginModal()" title="Sign in">
+                    <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i><span class="btn-label">Login</span>
+                </button>
+                <button id="logoutBtn" class="btn btn-sm btn-outline-secondary d-none" onclick="doLogout()" title="Sign out">
+                    <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i><span class="btn-label">Logout</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" aria-label="Conversations">
+        <div class="sidebar-inner">
+            <button class="btn btn-primary btn-new-chat" id="newChatBtn">
+                <i class="bi bi-plus-lg me-2"></i>New Chat
+            </button>
+
+            <div class="sidebar-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" id="chatSearch" class="form-control"
+                       placeholder="Search conversations" aria-label="Search conversations"
+                       autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other">
+            </div>
+
+            <span class="sidebar-section-label">Conversations</span>
+
+            <div id="chatList" class="chat-list">
+                <!-- Chat history items will be added here -->
+            </div>
+        </div>
+    </aside>
+    <div id="sidebarBackdrop" onclick="closeSidebarMobile()" aria-hidden="true"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Landing Page (shown when no chat is active) -->
+        <div id="landingPage" class="landing-page">
+            <div class="landing-inner text-center">
+                <img src="{{ landing.logo_url }}" alt="{{ landing.title }}" class="dc-logo landing-logo">
+                {% if landing.tagline %}<div class="hero-tagline">{{ landing.tagline }}</div>{% endif %}
+                <h1>{{ landing.title }}</h1>
+                {% if landing.call_to_action %}
+                <p class="landing-lead">{{ landing.call_to_action }}</p>
+                {% endif %}
+
+                <div class="search-container mb-4">
+                    <form autocomplete="off" role="search" onsubmit="return false;">
+                    <div class="input-group input-group-lg">
+                        <input type="search" class="form-control" id="landingSearchInput"
+                               autocomplete="off" aria-label="Ask a question"
+                               data-lpignore="true" data-1p-ignore data-form-type="other"
+                               placeholder="{{ landing.search_placeholder }}">
+                        <button class="btn btn-primary" type="button" id="landingSearchBtn" aria-label="Submit question">
+                            <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    </form>
+                </div>
+
+                <!-- Trust strip — Verikan's value props (cited · reproducible · verifiable) -->
+                <div class="trust-strip">
+                    <div class="trust-item">
+                        <i class="bi bi-quote" aria-hidden="true"></i>
+                        <div class="trust-item-label">Cited answers</div>
+                        <div class="trust-item-desc">Every figure traces back to its official source.</div>
+                    </div>
+                    <div class="trust-item">
+                        <i class="bi bi-journal-code" aria-hidden="true"></i>
+                        <div class="trust-item-label">Reproducible notebooks</div>
+                        <div class="trust-item-desc">Open a Colab-ready notebook and re-run it yourself.</div>
+                    </div>
+                    <div class="trust-item">
+                        <i class="bi bi-patch-check" aria-hidden="true"></i>
+                        <div class="trust-item-label">Independently verifiable</div>
+                        <div class="trust-item-desc">Check the evidence at
+                            <a href="https://typedstandards.org" target="_blank" rel="noopener">typedstandards.org</a>.</div>
+                    </div>
+                </div>
+
+                {% if landing.powered_by_label %}
+                <p class="powered-by mb-4">
+                    Powered by {% if landing.powered_by_url %}<a href="{{ landing.powered_by_url }}" target="_blank" rel="noopener">{{ landing.powered_by_label }}</a>{% else %}{{ landing.powered_by_label }}{% endif %} open data
+                </p>
+                {% endif %}
+
+                {% if landing.try_asking_label %}
+                <div class="landing-eyebrow">{{ landing.try_asking_label }}</div>
+                {% endif %}
+
+                <div class="example-grid">
+                    {% for question in landing.sample_questions %}
+                    <button class="example-btn" type="button">{{ question }}</button>
+                    {% endfor %}
+                </div>
+
+                <!-- Popular verified questions — populated from the verified
+                     library by JS (loadVerifiedSuggestions). Hidden until there
+                     is at least one match; static samples above are the
+                     always-present baseline. -->
+                <div id="verifiedSuggestions" class="verified-suggestions d-none">
+                    <div class="landing-eyebrow">
+                        <i class="bi bi-patch-check-fill text-success me-1" aria-hidden="true"></i>Verified answers — ready instantly
+                    </div>
+                    <div class="example-grid" id="verifiedSuggestionsGrid"></div>
+                </div>
+
+                <div class="mt-4 d-flex flex-wrap gap-2">
+                    <a href="/library" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-patch-check me-1" aria-hidden="true"></i>Browse the verified library
+                    </a>
+                    <a href="/dictionary" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-table me-1" aria-hidden="true"></i>Explore the data dictionary
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Interface (hidden initially) -->
+        <div id="chatInterface" class="chat-interface d-none">
+            <div class="chat-header">
+                <i class="bi bi-chat-square-text text-muted" aria-hidden="true"></i>
+                <h5 class="mb-0" id="chatTitle">New Chat</h5>
+                <div class="chat-header-actions">
+                    <button id="renameChatBtn" class="icon-btn" type="button"
+                            title="Rename conversation"
+                            aria-label="Rename conversation">
+                        <i class="bi bi-pencil" aria-hidden="true"></i>
+                    </button>
+                    <button id="exportChatBtn" class="icon-btn" type="button"
+                            title="Export this conversation as Markdown"
+                            aria-label="Export conversation as Markdown">
+                        <i class="bi bi-download" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages" aria-live="polite">
+                <!-- Messages will be added here -->
+            </div>
+
+            <button id="scrollBottomBtn" class="scroll-bottom-btn d-none" type="button"
+                    aria-label="Scroll to latest message" title="Scroll to latest">
+                <i class="bi bi-arrow-down" aria-hidden="true"></i>
+            </button>
+
+            <div class="chat-input-container">
+                <form autocomplete="off" onsubmit="return false;">
+                <div class="input-group">
+                    <textarea class="form-control" id="chatInput" rows="1"
+                              autocomplete="off" aria-label="Type your message"
+                              data-lpignore="true" data-1p-ignore data-form-type="other"
+                              placeholder="Ask a question…"></textarea>
+                    <button class="btn btn-primary" type="button" id="sendBtn" aria-label="Send message">
+                        <i class="bi bi-send" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div class="composer-hint text-muted small mt-1 d-none d-md-block" aria-hidden="true">
+                    <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
+                </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Footer (landing view only; hidden while a conversation is open) -->
+        <footer class="site-footer" id="siteFooter">
+            <div class="site-footer-inner">
+                <div class="footer-brand">
+                    <a href="https://dathere.com" target="_blank" rel="noopener"
+                       class="d-inline-flex align-items-center" aria-label="datHere home">
+                        <img src="/static/images/logo-light.svg" alt="datHere" class="dc-logo footer-logo">
+                    </a>
+                    <p class="footer-tagline">Verikan is built by datHere — data wrangling, redefined.</p>
+                </div>
+                <nav class="footer-links" aria-label="datHere">
+                    <div class="footer-col">
+                        <span class="footer-col-title">Verikan</span>
+                        <a href="/library">Verified Library</a>
+                        <a href="/dictionary">Data Dictionary</a>
+                        <a href="/docs">User Guide</a>
+                        <a href="https://dathere.com/contact/" target="_blank" rel="noopener">Contact <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
+                    </div>
+                </nav>
+            </div>
+            <div class="site-footer-bottom">
+                <span>© 2026 datHere. All rights reserved.</span>
+                <span>The verified Data Concierge</span>
+            </div>
+        </footer>
+    </main>
+
+    <!-- Notebook Modal -->
+    <div class="modal fade" id="notebookModal" tabindex="-1" aria-labelledby="notebookModalTitle">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-journal-code me-2"></i>
+                        <span id="notebookModalTitle">Generated Notebook</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="notebook-toolbar p-2 d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-primary me-2" id="notebookCellCount">0 cells</span>
+                            <span class="text-muted small">Compatible with Jupyter &amp; Google Colab</span>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-secondary" id="collapseAllBtn">
+                                <i class="bi bi-arrows-collapse"></i> Collapse All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" id="expandAllBtn">
+                                <i class="bi bi-arrows-expand"></i> Expand All
+                            </button>
+                        </div>
+                    </div>
+                    <div id="notebookCells" class="notebook-cells">
+                        <!-- Cells will be rendered here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a id="verifyTypedStandardsBtn" class="btn btn-outline-secondary me-auto d-none"
+                       target="_blank" rel="noopener"
+                       title="Independently verify this evidence at typedstandards.org — checks run in your browser">
+                        <i class="bi bi-patch-check-fill me-2"></i>Typed Standards verified
+                    </a>
+                    <a id="openColabBtn" class="btn btn-outline-secondary d-none"
+                       target="_blank" rel="noopener"
+                       title="Open this notebook in Google Colab">
+                        <i class="bi bi-box-arrow-up-right me-2"></i>Open in Colab
+                    </a>
+                    <button type="button" class="btn btn-outline-secondary" id="submitForReviewBtn"
+                            title="Submit this notebook for admin review — approved notebooks join the Verified Library">
+                        <i class="bi bi-check-circle me-2"></i>Submit for Review
+                    </button>
+                    <a id="downloadNotebookBtn" class="btn btn-primary" download>
+                        <i class="bi bi-download me-2"></i>Download .ipynb
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal (social / GitHub sign-in only) -->
+    <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalTitle">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="loginModalTitle"><i class="bi bi-box-arrow-in-right me-2"></i>Sign in</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <p class="text-muted small mb-3">
+                        Sign in to run new queries. Verified notebooks are available without signing in.
+                    </p>
+                    <div id="loginError" class="alert alert-danger d-none mb-3"></div>
+
+                    <div id="auth0Buttons" class="d-grid gap-2">
+                        <button type="button" id="auth0LoginBtn" class="btn btn-primary btn-lg"
+                                onclick="loginWithAuth0('github')">
+                            <i class="bi bi-github me-2"></i>Sign in with GitHub
+                        </button>
+                        <button type="button" id="auth0LinkedInBtn" class="btn btn-outline-secondary btn-lg"
+                                onclick="loginWithAuth0('linkedin')">
+                            <i class="bi bi-linkedin me-2"></i>Sign in with LinkedIn
+                        </button>
+                    </div>
+                    <div id="loginNoSocial" class="alert alert-warning small mt-3 mb-0 d-none">
+                        Social sign-in is not configured on this server.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Command Palette (opened with Cmd/Ctrl+K) -->
+    <div class="modal fade cmdk-modal" id="commandPalette" tabindex="-1" aria-labelledby="cmdkLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <h2 id="cmdkLabel" class="visually-hidden">Command palette</h2>
+                <input type="text" id="cmdkInput" class="form-control cmdk-input"
+                       placeholder="Search conversations or run a command…"
+                       autocomplete="off" aria-label="Search conversations or run a command">
+                <div id="cmdkResults" class="cmdk-results" role="listbox" aria-label="Results"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts overlay (opened with "?") -->
+    <div class="modal fade" id="shortcutsModal" tabindex="-1" aria-hidden="true" aria-labelledby="shortcutsModalTitle">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="shortcutsModalTitle"><i class="bi bi-keyboard me-2"></i>Keyboard shortcuts</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <dl class="shortcuts-list">
+                        <div><kbd>Enter</kbd><span>Send message</span></div>
+                        <div><kbd>Shift</kbd> + <kbd>Enter</kbd><span>New line</span></div>
+                        <div><kbd>⌘</kbd> / <kbd>Ctrl</kbd> + <kbd>K</kbd><span>Command palette</span></div>
+                        <div><kbd>/</kbd><span>Focus the message box</span></div>
+                        <div><kbd>?</kbd><span>Show this help</span></div>
+                        <div><kbd>Esc</kbd><span>Close dialogs</span></div>
+                        <div><i class="bi bi-pencil" aria-hidden="true"></i><span>Rename — pencil icon in the chat header (or double-click the title)</span></div>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <i class="bi bi-info-circle me-2 text-primary" aria-hidden="true"></i>
+                <strong class="me-auto">Notice</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="toastBody"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/python.min.js"></script>
+    <script src="/static/js/app.js?v=20260819-reviews3"></script>
+</body>
+</html>

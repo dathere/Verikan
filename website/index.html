@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>document.documentElement.classList.remove('no-js');</script>
+
+  <title>Data Concierge — AI-Powered Data Enrichment with High-Value Datasets</title>
+  <meta name="description" content="Ask questions in plain English about your data, enriched with authoritative high-value datasets — and get citation-backed answers with reproducible Jupyter notebooks." />
+
+  <!-- Canonical / social -->
+  <link rel="canonical" href="https://dataconcierge.dathere.com/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://dataconcierge.dathere.com/" />
+  <meta property="og:title" content="Data Concierge — AI-Powered Data Enrichment with High-Value Datasets" />
+  <meta property="og:description" content="Ask questions in plain English about your data, enriched with authoritative high-value datasets — and get citation-backed answers with reproducible Jupyter notebooks." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Data Concierge — AI-Powered Data Enrichment with High-Value Datasets" />
+  <meta name="twitter:description" content="Ask questions in plain English about your data, enriched with authoritative high-value datasets — and get citation-backed answers with reproducible Jupyter notebooks." />
+
+  <!-- Favicon (inline SVG: brand-blue dot) -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='12' fill='%233b82f6'/></svg>" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0a0e17;
+      --bg-card:     #111827;
+      --bg-card2:    #141c2b;
+      --border:      rgba(255,255,255,.08);
+      --border-glow: rgba(99,179,237,.25);
+      --text:        #e2e8f0;
+      --muted:       #8b98b1;
+      --accent:      #3b82f6;
+      --accent-2:    #8b5cf6;
+      --accent-3:    #06b6d4;
+      --accent-4:    #10b981;
+      --red:         #ef4444;
+      --yellow:      #f59e0b;
+      --grad-hero:   linear-gradient(135deg, #0a0e17 0%, #0d1a2e 50%, #0f1629 100%);
+      --grad-accent: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      --radius:      12px;
+      --radius-lg:   20px;
+      --shadow:      0 4px 24px rgba(0,0,0,.4);
+      --shadow-lg:   0 12px 48px rgba(0,0,0,.6);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+
+    /* ── Utilities ────────────────────────────────────────────── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .container-sm { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      letter-spacing: .03em; text-transform: uppercase;
+    }
+    .badge-blue   { background: rgba(59,130,246,.15); color: #60a5fa; border: 1px solid rgba(59,130,246,.3); }
+    .badge-purple { background: rgba(139,92,246,.15);  color: #a78bfa; border: 1px solid rgba(139,92,246,.3); }
+    .badge-green  { background: rgba(16,185,129,.15);  color: #34d399; border: 1px solid rgba(16,185,129,.3); }
+    .badge-cyan   { background: rgba(6,182,212,.15);   color: #22d3ee; border: 1px solid rgba(6,182,212,.3); }
+    .badge-yellow { background: rgba(245,158,11,.15);  color: #fbbf24; border: 1px solid rgba(245,158,11,.3); }
+
+    .gradient-text {
+      background: var(--grad-accent);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── Nav ──────────────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(10,14,23,.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: 18px;
+    }
+    .nav-logo .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-links a { font-size: 14px; color: var(--muted); transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      padding: 8px 20px; border-radius: var(--radius);
+      background: var(--grad-accent); color: #fff !important;
+      font-weight: 600; font-size: 14px;
+      transition: opacity .2s, transform .2s;
+    }
+    .nav-cta:hover { opacity: .9; transform: translateY(-1px); }
+
+    /* Mobile nav toggle */
+    .nav-toggle {
+      display: none;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 40px; height: 40px;
+      border-radius: 8px;
+      cursor: pointer;
+      align-items: center; justify-content: center;
+      padding: 0;
+    }
+    .nav-toggle:hover { border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.04); }
+    .nav-toggle svg { width: 20px; height: 20px; }
+
+    @media (max-width: 768px) {
+      .nav-toggle { display: inline-flex; }
+      .nav-links {
+        display: none;
+        position: absolute;
+        top: 64px; left: 0; right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        background: rgba(10,14,23,.97);
+        backdrop-filter: blur(16px);
+        border-bottom: 1px solid var(--border);
+        padding: 12px 24px 20px;
+      }
+      .nav-links.open { display: flex; }
+      .nav-links a {
+        padding: 14px 0;
+        font-size: 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .nav-links a:last-child { border-bottom: none; }
+      .nav-cta { margin-top: 12px; text-align: center; }
+    }
+
+    /* Skip link */
+    .skip-link {
+      position: absolute;
+      top: -48px; left: 8px;
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      z-index: 200;
+      font-weight: 600;
+      font-size: 14px;
+      transition: top .2s;
+    }
+    .skip-link:focus { top: 8px; outline: 2px solid #fff; outline-offset: 2px; }
+
+    /* ── Hero ─────────────────────────────────────────────────── */
+    .hero {
+      padding: 140px 0 100px;
+      background: var(--grad-hero);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 20%, rgba(59,130,246,.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 80% at 80% 80%, rgba(139,92,246,.07) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 64px; align-items: center;
+    }
+    .hero-eyebrow { margin-bottom: 20px; }
+    .hero h1 {
+      font-size: clamp(36px, 5vw, 56px);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -.02em;
+      margin-bottom: 24px;
+    }
+    .hero h1 .hero-connector {
+      display: block;
+      font-weight: 500;
+      font-size: .32em;
+      letter-spacing: .22em;
+      color: var(--muted);
+      text-transform: uppercase;
+      text-align: center;
+      margin: .35em 0 .2em;
+    }
+    .hero h1 .hero-connector::before,
+    .hero h1 .hero-connector::after {
+      content: "—";
+      display: inline-block;
+      margin: 0 .7em;
+      opacity: .55;
+    }
+    @media (min-width: 480px) {
+      .hero h1 .gradient-text { white-space: nowrap; }
+    }
+    .hero p {
+      font-size: 18px; color: var(--muted); line-height: 1.7;
+      margin-bottom: 36px; max-width: 520px;
+    }
+    .hero-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: var(--radius);
+      background: var(--grad-accent); color: #fff;
+      font-weight: 600; font-size: 15px;
+      transition: opacity .2s, transform .2s, box-shadow .2s;
+      box-shadow: 0 4px 20px rgba(59,130,246,.35);
+    }
+    .btn-primary:hover { opacity: .9; transform: translateY(-2px); box-shadow: 0 8px 28px rgba(59,130,246,.4); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: var(--radius);
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border);
+      font-weight: 600; font-size: 15px;
+      transition: border-color .2s, background .2s, transform .2s;
+    }
+    .btn-secondary:hover { border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.04); transform: translateY(-2px); }
+
+    /* Terminal Card */
+    .hero-terminal {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+    }
+    .terminal-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,.03);
+      border-bottom: 1px solid var(--border);
+    }
+    .terminal-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+    }
+    .terminal-dot.red    { background: #ff5f56; }
+    .terminal-dot.yellow { background: #ffbd2e; }
+    .terminal-dot.green  { background: #27c93f; }
+    .terminal-title { font-size: 12px; color: var(--muted); margin-left: 8px; font-family: 'JetBrains Mono', monospace; }
+    .terminal-body { padding: 24px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.8; }
+    .t-prompt { color: var(--accent-4); }
+    .t-query  { color: var(--text); }
+    .t-comment { color: var(--muted); }
+    .t-key    { color: #fbbf24; }
+    .t-val    { color: #34d399; }
+    .t-string { color: #a78bfa; }
+    .t-num    { color: #60a5fa; }
+    .t-bar {
+      height: 4px; border-radius: 2px;
+      background: linear-gradient(90deg, var(--accent-4), var(--accent));
+      margin: 4px 0; animation: progress 2s ease-in-out infinite;
+    }
+    @keyframes progress {
+      0%,100% { opacity: 1; }
+      50% { opacity: .5; }
+    }
+
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; }
+      .hero-terminal { display: none; }
+    }
+
+    /* ── Stats Bar ────────────────────────────────────────────── */
+    .stats-bar {
+      padding: 48px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .stat-item { text-align: center; }
+    .stat-number { font-size: 36px; font-weight: 800; letter-spacing: -.02em; }
+    .stat-label  { font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+    @media (max-width: 640px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ── Sections ─────────────────────────────────────────────── */
+    section { padding: 96px 0; }
+    .section-header { text-align: center; margin-bottom: 64px; }
+    .section-header h2 {
+      font-size: clamp(28px, 4vw, 42px); font-weight: 800;
+      letter-spacing: -.02em; margin-bottom: 16px;
+    }
+    .section-header p { font-size: 18px; color: var(--muted); max-width: 560px; margin: 0 auto; }
+
+    /* ── How It Works ─────────────────────────────────────────── */
+    .how-it-works { background: var(--bg-card2); }
+    .steps { display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: grid; grid-template-columns: 80px 1fr;
+      gap: 32px; align-items: start;
+      padding: 40px 0;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      width: 56px; height: 56px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 800;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+      position: relative; z-index: 1;
+    }
+    .step:not(:last-child) .step-num::after {
+      content: '';
+      position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+      width: 2px; height: calc(100% + 80px);
+      background: linear-gradient(to bottom, var(--border), transparent);
+    }
+    .step-content h3 { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+    .step-content p  { color: var(--muted); font-size: 15px; }
+    .step-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .step-tag {
+      font-size: 11px; font-weight: 600; padding: 3px 10px;
+      border-radius: 6px; font-family: 'JetBrains Mono', monospace;
+      background: rgba(59,130,246,.1); color: #60a5fa;
+      border: 1px solid rgba(59,130,246,.2);
+    }
+
+    /* ── Features ─────────────────────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      transition: border-color .25s, transform .25s, box-shadow .25s;
+    }
+    .feature-card:hover {
+      border-color: var(--border-glow);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+    }
+    .feature-icon {
+      width: 48px; height: 48px; border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 20px;
+    }
+    .feature-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+    .feature-card p  { font-size: 14px; color: var(--muted); line-height: 1.65; }
+
+    @media (max-width: 900px) { .features-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .features-grid { grid-template-columns: 1fr; } }
+
+    /* ── Data Sources ─────────────────────────────────────────── */
+    .sources { background: var(--bg-card2); }
+    .sources-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+    }
+    .source-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      display: flex; flex-direction: column; gap: 12px;
+      transition: border-color .2s, transform .2s;
+    }
+    .source-card:hover { border-color: var(--border-glow); transform: translateY(-2px); }
+    .source-header { display: flex; align-items: center; gap: 12px; }
+    .source-logo {
+      width: 40px; height: 40px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .source-name { font-weight: 700; font-size: 15px; }
+    .source-desc { font-size: 13px; color: var(--muted); line-height: 1.55; }
+    .source-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    @media (max-width: 900px) { .sources-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .sources-grid { grid-template-columns: 1fr; } }
+
+    /* ── Use Cases ────────────────────────────────────────────── */
+    .use-cases-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px;
+    }
+    .use-case-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 36px;
+      transition: border-color .25s;
+    }
+    .use-case-card:hover { border-color: var(--border-glow); }
+    .use-case-icon { font-size: 32px; margin-bottom: 16px; }
+    .use-case-card h3 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+    .use-case-card p  { color: var(--muted); font-size: 15px; line-height: 1.65; margin-bottom: 20px; }
+    .use-case-examples { display: flex; flex-direction: column; gap: 8px; }
+    .use-case-example {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px;
+      font-size: 13px; font-family: 'JetBrains Mono', monospace;
+      color: var(--muted);
+    }
+    .use-case-example::before { content: '"'; color: var(--accent); font-size: 16px; line-height: 1; }
+
+    @media (max-width: 768px) { .use-cases-grid { grid-template-columns: 1fr; } }
+
+    /* ── Pipeline ─────────────────────────────────────────────── */
+    .pipeline { background: var(--bg-card2); }
+    .pipeline-visual {
+      display: flex; align-items: stretch; gap: 0;
+      overflow-x: auto; padding-bottom: 8px;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    .pipe-step {
+      flex: 1; min-width: 140px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 16px; text-align: center;
+      position: relative;
+      transition: border-color .2s;
+    }
+    .pipe-step:hover { border-color: var(--border-glow); }
+    .pipe-step:not(:last-child)::after {
+      content: '→';
+      position: absolute; right: -18px; top: 50%; transform: translateY(-50%);
+      color: var(--muted); font-size: 18px; z-index: 1;
+    }
+    .pipe-step + .pipe-step { margin-left: 24px; }
+    .pipe-icon { font-size: 28px; margin-bottom: 12px; }
+    .pipe-name { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+    .pipe-desc { font-size: 11px; color: var(--muted); }
+
+    /* ── Confidence ─────────────────────────────────────────────── */
+    .confidence-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 40px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start;
+    }
+    .conf-title { font-size: 24px; font-weight: 800; margin-bottom: 12px; }
+    .conf-desc  { color: var(--muted); font-size: 15px; line-height: 1.7; }
+    .conf-factors { display: flex; flex-direction: column; gap: 20px; }
+    .conf-factor {}
+    .conf-factor-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .conf-factor-name { font-size: 14px; font-weight: 600; }
+    .conf-factor-weight { font-size: 13px; color: var(--muted); }
+    .conf-bar-track { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .conf-bar-fill  { height: 100%; border-radius: 3px; background: var(--grad-accent); }
+
+    @media (max-width: 768px) {
+      .confidence-card { grid-template-columns: 1fr; }
+    }
+
+    /* ── Notebook Preview ─────────────────────────────────────── */
+    .notebook-preview {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+    }
+    .nb-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 20px;
+      background: rgba(255,255,255,.03);
+      border-bottom: 1px solid var(--border);
+    }
+    .nb-header-icon { font-size: 20px; }
+    .nb-header-title { font-size: 14px; font-weight: 600; }
+    .nb-header-badge { margin-left: auto; }
+    .nb-cells { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+    .nb-cell {
+      border-radius: 8px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .nb-cell-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,.03);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace;
+    }
+    .nb-cell-type { padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+    .nb-cell-type.code { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .nb-cell-type.md   { background: rgba(16,185,129,.15); color: #34d399; }
+    .nb-cell-body { padding: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.7; }
+    .nb-cell-body.markdown { font-family: 'Inter', sans-serif; font-size: 13px; }
+
+    /* ── CTA ──────────────────────────────────────────────────── */
+    .cta-section {
+      text-align: center;
+      padding: 120px 0;
+      background: var(--bg-card2);
+      position: relative; overflow: hidden;
+    }
+    .cta-section::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 60% 60% at 50% 0%, rgba(59,130,246,.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-section h2 {
+      font-size: clamp(28px, 4vw, 48px); font-weight: 800;
+      letter-spacing: -.02em; margin-bottom: 20px;
+    }
+    .cta-section p { font-size: 18px; color: var(--muted); max-width: 500px; margin: 0 auto 40px; }
+    .cta-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+    /* ── Footer ───────────────────────────────────────────────── */
+    footer {
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 48px 0;
+    }
+    .footer-inner {
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px;
+    }
+    .footer-logo { font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+    .footer-logo .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a { font-size: 14px; color: var(--muted); transition: color .2s; }
+    .footer-links a:hover { color: var(--text); }
+    .footer-copy { font-size: 13px; color: var(--muted); }
+
+    /* ── Misc ─────────────────────────────────────────────────── */
+    .divider { height: 1px; background: var(--border); }
+
+    .tag-list { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* Scroll animation */
+    .fade-in {
+      opacity: 0; transform: translateY(20px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+    /* No-JS fallback: ensure fade-in content is visible without IntersectionObserver */
+    .no-js .fade-in { opacity: 1; transform: none; }
+
+    /* Respect reduced-motion preference */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+      .fade-in { opacity: 1 !important; transform: none !important; }
+    }
+
+    /* ── Print Styles ─────────────────────────────────────────── */
+    @media print {
+      /* Page setup */
+      @page {
+        size: Letter;
+        margin: 0.6in 0.55in;
+      }
+
+      /* Reset the dark theme to a light, ink-friendly palette.
+         Override CSS variables AND inline dark backgrounds so everything
+         renders cleanly on paper. */
+      :root {
+        --bg:          #ffffff;
+        --bg-card:     #ffffff;
+        --bg-card2:    #f7f8fb;
+        --border:      #d8dde6;
+        --border-glow: #c3cbd9;
+        --text:        #11161f;
+        --muted:       #475569;
+        --shadow:      none;
+        --shadow-lg:   none;
+        --grad-hero:   #ffffff;
+      }
+
+      html, body {
+        background: #ffffff !important;
+        color: #11161f !important;
+        font-size: 11pt;
+        line-height: 1.45;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        overflow: visible !important;
+      }
+
+      /* Hide chrome-only / decorative elements */
+      nav[aria-label="Primary"],
+      .skip-link,
+      .hero-aurora,
+      .hero-actions,
+      .nav-toggle,
+      .nav-links,
+      .cta-section .cta-actions,
+      .cta-actions,
+      .hero-eyebrow,
+      .hero-stats,
+      .demo-controls,
+      .demo-toolbar { display: none !important; }
+
+      main, #main { padding-top: 0 !important; }
+
+      /* CRITICAL: fade-in content starts at opacity:0 in regular CSS and only
+         becomes visible via JS IntersectionObserver on scroll. In print mode,
+         nothing scrolls — so force every fade-in element to render. */
+      .fade-in, .fade-in:not(.visible) {
+        opacity: 1 !important;
+        transform: none !important;
+        visibility: visible !important;
+      }
+
+      /* Tame hero padding/decoration so it doesn't span multiple pages */
+      .hero { padding: 12pt 0 !important; }
+      .hero::before, .hero-aurora { display: none !important; }
+
+      /* Force every section/container to render in full, no clipping */
+      section, .container, .container-sm, main {
+        background: #ffffff !important;
+        padding-top: 18pt !important;
+        padding-bottom: 18pt !important;
+        max-width: 100% !important;
+        overflow: visible !important;
+      }
+
+      /* Let content flow naturally; only force breaks at top-level section
+         headers when needed and keep cards together where possible. */
+      section { padding: 14pt 0 !important; }
+      .section-header { break-after: avoid; page-break-after: avoid; }
+
+      /* Typography */
+      h1 { font-size: 24pt; line-height: 1.2; margin-bottom: 10pt; color: #0b1220 !important; }
+      h2 { font-size: 18pt; line-height: 1.25; margin: 0 0 10pt; color: #0b1220 !important; }
+      h3 { font-size: 12pt; line-height: 1.3; margin: 0 0 6pt; color: #0b1220 !important; }
+      h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+      p, li { color: #1f2937 !important; orphans: 3; widows: 3; }
+
+      /* Gradient text becomes a solid brand color so it doesn't disappear */
+      .gradient-text {
+        background: none !important;
+        -webkit-text-fill-color: #2563eb !important;
+        color: #2563eb !important;
+      }
+
+      /* Convert cards / panels to light bordered blocks */
+      .feature-card, .source-card, .use-case-card, .step-card,
+      .hero-terminal, .agent-card, .conf-card, .factor-card, .pipeline-card,
+      .stat-card, .tier-card, .agent-row, .source-tile, .step, .step-content,
+      .panel, .card, [class*="-card"] {
+        background: #ffffff !important;
+        color: #11161f !important;
+        border: 1px solid #d8dde6 !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* Grids: keep multi-column but tighter for paper */
+      .features-grid  { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 10pt !important; }
+      .sources-grid   { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 10pt !important; }
+      .use-cases-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 10pt !important; }
+      .hero-grid      { display: block !important; }
+      .hero-terminal  { display: block !important; margin-top: 14pt; }
+
+      /* Badges keep a hint of color but render reliably on paper */
+      .badge {
+        border: 1px solid #94a3b8 !important;
+        background: #f1f5f9 !important;
+        color: #1e293b !important;
+        padding: 2px 8px;
+        font-size: 9pt;
+      }
+
+      /* Code / terminal blocks */
+      pre, code, .hero-terminal, .terminal-body, .code-block {
+        background: #f5f6f8 !important;
+        color: #0b1220 !important;
+        border: 1px solid #d8dde6 !important;
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 9pt;
+        white-space: pre-wrap !important;
+        word-break: break-word;
+      }
+
+      /* Links: show absolute URLs after the link text */
+      a[href^="http"]::after {
+        content: " (" attr(href) ")";
+        font-size: 9pt;
+        color: #475569;
+        word-break: break-all;
+      }
+      a[href^="mailto"]::after,
+      a[href^="#"]::after { content: ""; }
+
+      /* Confidence/progress bars: keep their colors */
+      .factor-bar, .conf-bar, .progress, [class*="-bar"] {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      /* Footer */
+      footer {
+        background: #ffffff !important;
+        color: #475569 !important;
+        border-top: 1px solid #d8dde6 !important;
+        padding: 12pt 0 !important;
+      }
+
+      /* Suppress decorative blobs / gradients */
+      [class*="aurora"], [class*="glow"], [class*="blob"], [class*="orbit"] {
+        display: none !important;
+      }
+
+      /* Icon chips */
+      .feature-icon, .use-case-icon, .step-icon {
+        background: #eef2ff !important;
+        color: #1e293b !important;
+        border: 1px solid #c7d2fe !important;
+      }
+
+      /* Pipeline: wrap the horizontal flow into a 4-col grid so all 8 agents fit */
+      .pipeline-visual {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+        gap: 8pt !important;
+        overflow: visible !important;
+      }
+      .pipe-step {
+        margin-left: 0 !important;
+        min-width: 0 !important;
+        padding: 10pt 8pt !important;
+        background: #ffffff !important;
+        border: 1px solid #d8dde6 !important;
+      }
+      .pipe-step::after { display: none !important; } /* hide arrow connectors */
+      .pipe-name { font-size: 10pt !important; }
+      .pipe-desc { font-size: 8.5pt !important; color: #475569 !important; }
+      .pipe-icon { font-size: 18pt !important; margin-bottom: 6pt !important; }
+
+      /* Confidence card: keep two-column layout but trim padding */
+      .confidence-card { padding: 18pt !important; gap: 18pt !important; background: #ffffff !important; }
+      .conf-bar-track  { background: #e5e7eb !important; }
+      .conf-bar-fill   { background: #3b82f6 !important; }
+
+      /* Steps: screen CSS gives each step 40px vertical padding which wastes
+         half a page per step in print. Tighten and drop the card border so
+         the numbered list reads as a list, not a stack of empty boxes. */
+      .step {
+        padding: 6pt 0 !important;
+        gap: 14pt !important;
+        border: none !important;
+        border-bottom: 1px solid #e5e7eb !important;
+      }
+      .step:last-child { border-bottom: none !important; }
+      .step-num {
+        width: 32pt !important;
+        height: 32pt !important;
+        font-size: 12pt !important;
+      }
+      .step:not(:last-child) .step-num::after { display: none !important; }
+      .step-content h3 { font-size: 12pt !important; margin-bottom: 4pt !important; }
+      .step-content p  { font-size: 10pt !important; line-height: 1.45; }
+
+      /* Feature/source/use-case cards: trim default screen padding */
+      .feature-card, .source-card, .use-case-card {
+        padding: 10pt !important;
+      }
+      .feature-card .feature-icon,
+      .use-case-card .use-case-icon {
+        width: 28pt !important;
+        height: 28pt !important;
+        font-size: 14pt !important;
+        margin-bottom: 6pt !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- ── NAV ───────────────────────────────────────────────────── -->
+<nav aria-label="Primary">
+  <div class="container nav-inner">
+    <div class="nav-logo">
+      <div class="dot" aria-hidden="true"></div>
+      Data Concierge
+    </div>
+    <button class="nav-toggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="primary-nav-links">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+    <div class="nav-links" id="primary-nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#data-sources">Data Sources</a>
+      <a href="#use-cases">Use Cases</a>
+      <a href="#pipeline">Architecture</a>
+      <a href="#get-started" class="nav-cta">Get Started</a>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+
+<!-- ── HERO ──────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="hero-eyebrow">
+          <span class="badge badge-blue">✦ AI-Powered</span>
+          &nbsp;
+          <span class="badge badge-purple">High-Value Data</span>
+        </div>
+        <h1>Ask Any Question <span class="gradient-text">About Your Data</span> <span class="hero-connector">enriched with</span> <span class="gradient-text">High Value Datasets</span></h1>
+        <p>Data Concierge turns plain-English questions into citation-backed answers with reproducible Jupyter notebooks — deployable in any jurisdiction, powered by an ever-expanding library of authoritative datasets.</p>
+        <div class="hero-actions">
+          <a href="#get-started" class="btn-primary">
+            <span aria-hidden="true">↗</span> Request Access
+          </a>
+          <a href="#how-it-works" class="btn-secondary">
+            <span aria-hidden="true">▶</span> See How It Works
+          </a>
+        </div>
+      </div>
+
+      <!-- Terminal demo -->
+      <div class="hero-terminal">
+        <div class="terminal-header">
+          <div class="terminal-dot red" aria-hidden="true"></div>
+          <div class="terminal-dot yellow" aria-hidden="true"></div>
+          <div class="terminal-dot green" aria-hidden="true"></div>
+          <span class="terminal-title">data-concierge · live query</span>
+        </div>
+        <div class="terminal-body">
+          <div><span class="t-prompt">user&nbsp;&gt;</span> <span class="t-query">How do Pittsburgh 311 complaints per capita correlate with neighborhood income and unemployment?</span></div>
+          <br>
+          <div><span class="t-comment">▸ Intent: </span><span class="t-string">DATA_LINKING · Tier 2</span></div>
+          <div><span class="t-comment">▸ Entities: </span><span class="t-val">Pittsburgh</span> <span class="t-comment">/ </span><span class="t-val">311 Requests, MedianIncome, Unemployment</span></div>
+          <div><span class="t-comment">▸ Sources: </span><span class="t-key">Pittsburgh 311</span><span class="t-comment">, </span><span class="t-key">Census ACS</span><span class="t-comment">, </span><span class="t-key">BLS LAUS</span></div>
+          <div class="t-bar" style="width:65%"></div>
+          <br>
+          <div><span class="t-comment">▸ Top neighborhood:&nbsp;</span><span class="t-val">Carrick</span> <span class="t-comment">(</span><span class="t-num">8.4</span><span class="t-comment"> reqs / 100 res)</span></div>
+          <div><span class="t-comment">▸ Median income:&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="t-num">$42,300</span> <span class="t-comment">vs. </span><span class="t-num">$58,000</span><span class="t-comment"> citywide</span></div>
+          <div><span class="t-comment">▸ Unemployment:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="t-num">4.0%</span> <span class="t-comment">(Allegheny Co.)</span></div>
+          <div><span class="t-comment">▸ Correlation r:&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="t-num">-0.71</span> <span class="t-comment">(income × complaints)</span></div>
+          <div><span class="t-comment">▸ Confidence: </span><span class="t-val">HIGH (0.88)</span></div>
+          <br>
+          <div><span class="t-comment">▸ Notebook: </span><span class="t-string">pgh_311_demographics.ipynb</span> <span class="t-val">✓</span></div>
+          <div><span class="t-comment">▸ Citations: </span><span class="t-num">4</span><span class="t-comment"> official sources cited</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── STATS ──────────────────────────────────────────────────── -->
+<div class="stats-bar">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-item fade-in">
+        <div class="stat-number gradient-text">7+</div>
+        <div class="stat-label">High Value Data</div>
+      </div>
+      <div class="stat-item fade-in">
+        <div class="stat-number gradient-text">60+</div>
+        <div class="stat-label">Pre-Mapped Indicators</div>
+      </div>
+      <div class="stat-item fade-in">
+        <div class="stat-number gradient-text">6</div>
+        <div class="stat-label">Intent Types Classified</div>
+      </div>
+      <div class="stat-item fade-in">
+        <div class="stat-number gradient-text">100%</div>
+        <div class="stat-label">Reproducible Notebooks</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── HOW IT WORKS ───────────────────────────────────────────── -->
+<section class="how-it-works" id="how-it-works">
+  <div class="container">
+    <div class="section-header fade-in">
+      <span class="badge badge-cyan">Process</span>
+      <h2 style="margin-top:16px">From Question to<br>Reproducible Research</h2>
+      <p>Eight intelligent agents work in sequence to classify your intent, retrieve authoritative data, FAIRify it against your metadata schemas, compute statistics, and deliver a citable notebook.</p>
+    </div>
+    <div class="steps container-sm">
+      <div class="step fade-in">
+        <div class="step-num gradient-text">1</div>
+        <div class="step-content">
+          <h3>Intent Classification</h3>
+          <p>Your natural-language query is classified into one of six intent types — factual lookup, comparison, trend analysis, dataset discovery, methodology question, or data linking — and routed to the appropriate processing tier (1, 2, or 3).</p>
+          <div class="step-tags">
+            <span class="step-tag">FACTUAL_LOOKUP</span>
+            <span class="step-tag">COMPARISON</span>
+            <span class="step-tag">TREND_ANALYSIS</span>
+            <span class="step-tag">DATASET_DISCOVERY</span>
+            <span class="step-tag">METHODOLOGY_QUESTION</span>
+            <span class="step-tag">DATA_LINKING</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-in">
+        <div class="step-num gradient-text">2</div>
+        <div class="step-content">
+          <h3>Entity Extraction</h3>
+          <p>Places are resolved to canonical identifiers, variables are mapped to authoritative codes from the active connector pack (e.g., BLS series, Census variables, FRED codes), and time periods are normalized. Geographic resolution scales from country down to state/province, county, and city — wherever the connectors reach.</p>
+          <div class="step-tags">
+            <span class="step-tag">geoId/48 → Texas</span>
+            <span class="step-tag">NUTS:FR10 → Île-de-France</span>
+            <span class="step-tag">UnemploymentRate</span>
+            <span class="step-tag">2019–2024</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-in">
+        <div class="step-num gradient-text">3</div>
+        <div class="step-content">
+          <h3>Multi-Source Data Retrieval</h3>
+          <p>A prioritized retrieval strategy first queries Data Commons, then falls back to vector similarity search, then directly calls the configured connector APIs — BLS, Census, BEA, FRED, or any custom source plugged into the connector library. Results are deduplicated and cached with per-source TTLs.</p>
+          <div class="step-tags">
+            <span class="step-tag">Data Commons v2</span>
+            <span class="step-tag">Qdrant / Pinecone</span>
+            <span class="step-tag">Redis TTL Cache</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-in">
+        <div class="step-num gradient-text">4</div>
+        <div class="step-content">
+          <h3>FAIRification &amp; Metadata Enrichment</h3>
+          <p>Retrieved data is enriched in-process against FAIR principles — Findable, Accessible, Interoperable, Reusable. Customizable metadata schemas (DCAT-AP, Schema.org/Dataset, DataCite, or your organization's own) describe provenance, licensing, controlled vocabularies, and quality flags before any downstream computation.</p>
+          <div class="step-tags">
+            <span class="step-tag">DCAT-AP</span>
+            <span class="step-tag">Schema.org/Dataset</span>
+            <span class="step-tag">DataCite</span>
+            <span class="step-tag">Custom Schemas</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-in">
+        <div class="step-num gradient-text">5</div>
+        <div class="step-content">
+          <h3>Statistical Computation</h3>
+          <p>The Stats Computer runs the appropriate calculation for each intent type: direct lookups, time-series trend analysis, cross-sectional comparisons, or statistical inference — each with its own reliability score.</p>
+          <div class="step-tags">
+            <span class="step-tag">direct_lookup: 1.0</span>
+            <span class="step-tag">trend_analysis: 0.85</span>
+            <span class="step-tag">statistical_inference: 0.70</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-in">
+        <div class="step-num gradient-text">6</div>
+        <div class="step-content">
+          <h3>Visualization Generation</h3>
+          <p>Vega-Lite chart specifications are generated automatically — time-series line charts, bar comparisons, geographic choropleth maps — and embedded directly in the output notebook.</p>
+          <div class="step-tags">
+            <span class="step-tag">Vega-Lite</span>
+            <span class="step-tag">Time Series</span>
+            <span class="step-tag">Choropleth</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-in">
+        <div class="step-num gradient-text">7</div>
+        <div class="step-content">
+          <h3>Citation Building</h3>
+          <p>Every data point is traced back to its authoritative source. Citations are formatted in both government and academic styles with publication dates, dataset names, API endpoints, and access timestamps.</p>
+          <div class="step-tags">
+            <span class="step-tag">Government Format</span>
+            <span class="step-tag">Academic Format</span>
+            <span class="step-tag">API Attribution</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-in">
+        <div class="step-num gradient-text">8</div>
+        <div class="step-content">
+          <h3>Reproducible Notebook</h3>
+          <p>Every query generates a self-contained, Colab-ready Jupyter notebook. The full execution trace — every API call, every computation — is recorded so your analysis can be reproduced, modified, and peer-reviewed.</p>
+          <div class="step-tags">
+            <span class="step-tag">.ipynb</span>
+            <span class="step-tag">Colab-Ready</span>
+            <span class="step-tag">execution_trace</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ───────────────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <div class="section-header fade-in">
+      <span class="badge badge-blue">Capabilities</span>
+      <h2 style="margin-top:16px">Built for Rigorous<br>Data Research</h2>
+      <p>Every feature is designed around a core principle: authoritative data, traceable methods, and reproducible results.</p>
+    </div>
+    <div class="features-grid">
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(59,130,246,.12)">🧠</div>
+        <h3>Multi-Agent AI Orchestration</h3>
+        <p>LangGraph-powered supervisor coordinates eight specialized agents — each expert in a different phase of the data pipeline. The supervisor delegates entity extraction, function calling, and reasoning to your configured LLM.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(16,185,129,.12)">🔐</div>
+        <h3>Bring Your Own LLM</h3>
+        <p>Data Concierge is LLM-agnostic by design. Run with frontier models from your preferred provider, open-weights models, or fully local LLMs deployed on-premises — keeping sensitive data and queries inside your security perimeter.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(6,182,212,.12)">🧬</div>
+        <h3>Auto-Derived Ontologies</h3>
+        <p>Domain ontologies are derived automatically by combining statistical analysis — distributions, cardinality, type inference, correlations — with FAIRified metadata, in the context of the LLM's general world knowledge. Outputs map cleanly to well-known schemas and vocabularies (Schema.org, SKOS, DCAT, Dublin Core, PROV-O) and can be easily customized and tailored to your domain.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(16,185,129,.12)">📓</div>
+        <h3>Reproducible Jupyter Notebooks</h3>
+        <p>Every answer ships as a Colab-ready .ipynb file. The full execution trace — API calls, computations, chart specs — is baked in so anyone can reproduce, verify, or extend your analysis.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(139,92,246,.12)">🔍</div>
+        <h3>Semantic Dataset Discovery</h3>
+        <p>Can't find the right dataset? The CKAN agent combines LLM function calling with Pinecone semantic vector search to find datasets across thousands of open-data catalogs — federal, state, municipal, and international.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(6,182,212,.12)">📊</div>
+        <h3>Automatic Visualizations</h3>
+        <p>Vega-Lite chart specs are generated automatically for every result — time-series trends, geographic comparisons, distribution plots — and rendered directly in the output notebook.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(245,158,11,.12)">📎</div>
+        <h3>Government-Grade Citations</h3>
+        <p>Every data point is traceable. Citations include the source agency, dataset name, API endpoint, access date, and series identifier — formatted in both government and academic styles.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(239,68,68,.12)">⚡</div>
+        <h3>Intelligent Caching</h3>
+        <p>Redis-backed cache with per-source TTLs (BLS: 30 days, Census: 90 days, NCSES: 365 days). Version-aware keys ensure cached data is never stale after API updates.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(59,130,246,.12)">🎯</div>
+        <h3>Confidence Scoring</h3>
+        <p>A five-factor weighted confidence model grades every answer: query interpretation, source authority, retrieval match quality, data recency, and computation reliability. Transparent, auditable scores.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(16,185,129,.12)">🔄</div>
+        <h3>Tiered Processing</h3>
+        <p>Simple factual lookups are fully automated (Tier 1). Comparisons and trend analyses run a multi-step pipeline (Tier 2). Complex or low-confidence queries escalate to human review (Tier 3).</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(139,92,246,.12)">🗄️</div>
+        <h3>Session Memory</h3>
+        <p>Conversational sessions keep recent queries in context, enabling follow-up questions and iterative refinement without repeating yourself. Context depth and expiry policy are fully configurable per deployment.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <div class="feature-icon" aria-hidden="true" style="background:rgba(16,185,129,.12)">👥</div>
+        <h3>Expert-in-the-Loop Curation</h3>
+        <p>Generated notebooks can be submitted to a GitHub-based review workflow where domain experts vet methodology and verify citations. Approved notebooks join an ever-expanding library of <strong>vetted, reproducible, hallucination-free deterministic answers</strong> — searchable, citable, and reusable across your organization.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── DATA SOURCES ───────────────────────────────────────────── -->
+<section class="sources" id="data-sources">
+  <div class="container">
+    <div class="section-header fade-in">
+      <span class="badge badge-green">Data Sources</span>
+      <h2 style="margin-top:16px">Authoritative Datasets<br>at Your Fingertips</h2>
+      <p>Direct API integrations with the most trusted sources in official statistical data — and a pluggable connector architecture so any jurisdiction can extend the library with their own high-value datasets.</p>
+    </div>
+    <div class="sources-grid">
+
+      <div class="source-card fade-in">
+        <div class="source-header">
+          <div class="source-logo" aria-hidden="true" style="background:rgba(6,182,212,.12)">📡</div>
+          <div>
+            <div class="source-name">Data Commons</div>
+            <span class="badge badge-cyan" style="font-size:10px">Google</span>
+          </div>
+        </div>
+        <div class="source-desc">Google's unified knowledge graph aggregating statistical data from 100+ government and academic sources. Primary source for geo-resolved queries via Data Commons DCID system.</div>
+        <div class="source-meta">
+          <span class="badge badge-cyan">v2 API</span>
+          <span class="badge badge-cyan">7-day TTL</span>
+        </div>
+      </div>
+
+      <div class="source-card fade-in">
+        <div class="source-header">
+          <div class="source-logo" aria-hidden="true" style="background:rgba(59,130,246,.12)">💼</div>
+          <div>
+            <div class="source-name">Bureau of Labor Statistics</div>
+            <span class="badge badge-blue" style="font-size:10px">BLS</span>
+          </div>
+        </div>
+        <div class="source-desc">Official US employment, wages, inflation (CPI), and productivity statistics. Timeseries API with 500 requests/day with API key. Primary source for labor market queries.</div>
+        <div class="source-meta">
+          <span class="badge badge-blue">Timeseries</span>
+          <span class="badge badge-blue">30-day TTL</span>
+        </div>
+      </div>
+
+      <div class="source-card fade-in">
+        <div class="source-header">
+          <div class="source-logo" aria-hidden="true" style="background:rgba(16,185,129,.12)">🏛️</div>
+          <div>
+            <div class="source-name">Census Bureau</div>
+            <span class="badge badge-green" style="font-size:10px">ACS · Decennial</span>
+          </div>
+        </div>
+        <div class="source-desc">Population, demographics, housing, and economic data from the American Community Survey and Decennial Census. Sub-county geographic granularity available.</div>
+        <div class="source-meta">
+          <span class="badge badge-green">ACS</span>
+          <span class="badge badge-green">90-day TTL</span>
+        </div>
+      </div>
+
+      <div class="source-card fade-in">
+        <div class="source-header">
+          <div class="source-logo" aria-hidden="true" style="background:rgba(245,158,11,.12)">📈</div>
+          <div>
+            <div class="source-name">FRED</div>
+            <span class="badge badge-yellow" style="font-size:10px">St. Louis Fed</span>
+          </div>
+        </div>
+        <div class="source-desc">Federal Reserve Economic Data — 800,000+ economic time series. 60+ pre-mapped series IDs covering GDP, interest rates, money supply, financial conditions, and more.</div>
+        <div class="source-meta">
+          <span class="badge badge-yellow">60+ Series</span>
+          <span class="badge badge-yellow">Real-time</span>
+        </div>
+      </div>
+
+      <div class="source-card fade-in">
+        <div class="source-header">
+          <div class="source-logo" aria-hidden="true" style="background:rgba(139,92,246,.12)">📊</div>
+          <div>
+            <div class="source-name">Bureau of Economic Analysis</div>
+            <span class="badge badge-purple" style="font-size:10px">BEA</span>
+          </div>
+        </div>
+        <div class="source-desc">GDP, national income, industry accounts, and international trade statistics from the BEA. Provides the authoritative measurement of the US economy.</div>
+        <div class="source-meta">
+          <span class="badge badge-purple">GDP · NIPA</span>
+          <span class="badge badge-purple">90-day TTL</span>
+        </div>
+      </div>
+
+      <div class="source-card fade-in">
+        <div class="source-header">
+          <div class="source-logo" aria-hidden="true" style="background:rgba(249,115,22,.12)">🛡️</div>
+          <div>
+            <div class="source-name">FBI Crime Data</div>
+            <span class="badge" style="background:rgba(249,115,22,.15);color:#fb923c;border:1px solid rgba(249,115,22,.3);font-size:10px">CDE · UCR</span>
+          </div>
+        </div>
+        <div class="source-desc">Crime statistics, arrest data, hate crimes, NIBRS incidents, law-enforcement employment, LEOKA, and use-of-force from the FBI's Crime Data Explorer — covering both the Summary Reporting System (SRS) and the National Incident-Based Reporting System (NIBRS). Powered by our <a href="https://github.com/dathere/fbi-crime-data-mcp" style="color:#fb923c;text-decoration:underline">fbi-crime-data-mcp</a> server.</div>
+        <div class="source-meta">
+          <span class="badge" style="background:rgba(249,115,22,.15);color:#fb923c;border:1px solid rgba(249,115,22,.3)">NIBRS + SRS</span>
+          <span class="badge" style="background:rgba(249,115,22,.15);color:#fb923c;border:1px solid rgba(249,115,22,.3)">17 Tools</span>
+        </div>
+      </div>
+
+      <div class="source-card fade-in">
+        <div class="source-header">
+          <div class="source-logo" aria-hidden="true" style="background:rgba(239,68,68,.12)">🗂️</div>
+          <div>
+            <div class="source-name">CKAN Open Data</div>
+            <span class="badge" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);font-size:10px">data.gov</span>
+          </div>
+        </div>
+        <div class="source-desc">LLM-driven semantic search across thousands of open-data catalogs — data.gov, agency portals, and CKAN instances worldwide. Function calling + Pinecone vector index for dataset discovery.</div>
+        <div class="source-meta">
+          <span class="badge" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)">Semantic Search</span>
+          <span class="badge" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)">Pinecone</span>
+        </div>
+      </div>
+
+      <div class="source-card fade-in">
+        <div class="source-header">
+          <div class="source-logo" aria-hidden="true" style="background:rgba(99,102,241,.12)">🔌</div>
+          <div>
+            <div class="source-name">Any modern MCP Server</div>
+            <span class="badge" style="background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.3);font-size:10px">Model Context Protocol</span>
+          </div>
+        </div>
+        <div class="source-desc">Plug in any modern Model Context Protocol (MCP) server — filesystems, databases, SaaS APIs, internal tooling, or domain-specific data services. The agent pipeline natively orchestrates MCP tools alongside the built-in connectors, so any MCP-exposed dataset becomes queryable in plain English.</div>
+        <div class="source-meta">
+          <span class="badge" style="background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.3)">MCP-Native</span>
+          <span class="badge" style="background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.3)">Plug &amp; Play</span>
+        </div>
+      </div>
+
+      <div class="source-card fade-in">
+        <div class="source-header">
+          <div class="source-logo" aria-hidden="true" style="background:var(--grad-accent)">＋</div>
+          <div>
+            <div class="source-name">Your Datasets</div>
+            <span class="badge badge-blue" style="font-size:10px">Extensible</span>
+          </div>
+        </div>
+        <div class="source-desc">The connector library is pluggable and ever-expanding. Native support for every major DCAT-compatible open-data platform — CKAN, Socrata, ESRI ArcGIS Hub, and more — plus connectors for Eurostat, ONS, World Bank, Statistics Canada, ABS, or any internal catalog.</div>
+        <div class="source-meta">
+          <span class="badge badge-blue">DCAT</span>
+          <span class="badge badge-blue">CKAN</span>
+          <span class="badge badge-blue">Socrata</span>
+          <span class="badge badge-blue">ESRI</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── USE CASES ──────────────────────────────────────────────── -->
+<section id="use-cases">
+  <div class="container">
+    <div class="section-header fade-in">
+      <span class="badge badge-purple">Use Cases</span>
+      <h2 style="margin-top:16px">Who Uses<br>Data Concierge</h2>
+      <p>From policy research to journalism, any field that depends on authoritative public data benefits from instant, citable answers.</p>
+    </div>
+    <div class="use-cases-grid">
+
+      <div class="use-case-card fade-in">
+        <div class="use-case-icon" aria-hidden="true">🏛️</div>
+        <h3>Policy Research</h3>
+        <p>Quickly synthesize economic indicators across jurisdictions, compare program outcomes, and build the data foundation for policy briefs — with every number traceable to an authoritative official source.</p>
+        <div class="use-case-examples">
+          <div class="use-case-example">Compare median household income across all 50 states in 2023</div>
+          <div class="use-case-example">How has the labor force participation rate changed since 2000?</div>
+          <div class="use-case-example">What are the poverty rates in rural vs urban counties?</div>
+        </div>
+      </div>
+
+      <div class="use-case-card fade-in">
+        <div class="use-case-icon" aria-hidden="true">📰</div>
+        <h3>Data Journalism</h3>
+        <p>Get shareable, reproducible notebooks behind every statistic you publish. Readers and editors can verify every number by opening the notebook — no more "according to data."</p>
+        <div class="use-case-examples">
+          <div class="use-case-example">What is the unemployment trend in the Rust Belt since 2010?</div>
+          <div class="use-case-example">How does inflation compare to wage growth over the last decade?</div>
+          <div class="use-case-example">Find datasets on housing affordability by metro area</div>
+        </div>
+      </div>
+
+      <div class="use-case-card fade-in">
+        <div class="use-case-icon" aria-hidden="true">🎓</div>
+        <h3>Academic Research</h3>
+        <p>Generate properly cited datasets and methodology explanations for papers and dissertations. The execution trace documents every step of data acquisition and transformation for peer review.</p>
+        <div class="use-case-examples">
+          <div class="use-case-example">How is the Consumer Price Index measured?</div>
+          <div class="use-case-example">Find longitudinal datasets linking education and income</div>
+          <div class="use-case-example">What is the GDP growth trend for the Southeast region?</div>
+        </div>
+      </div>
+
+      <div class="use-case-card fade-in">
+        <div class="use-case-icon" aria-hidden="true">💼</div>
+        <h3>Business Intelligence</h3>
+        <p>Contextualize your company's performance against macroeconomic benchmarks, research expansion markets, and build data-backed forecasts anchored to official government statistics.</p>
+        <div class="use-case-examples">
+          <div class="use-case-example">What is the job growth rate in the healthcare sector?</div>
+          <div class="use-case-example">Compare construction spending trends by state</div>
+          <div class="use-case-example">How has e-commerce as a share of retail changed since 2019?</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── CONFIDENCE SCORING ─────────────────────────────────────── -->
+<section id="confidence" style="padding:80px 0; background:var(--bg-card2)">
+  <div class="container">
+    <div class="confidence-card fade-in">
+      <div>
+        <span class="badge badge-yellow">Transparency</span>
+        <h2 class="conf-title" style="margin-top:16px">Five-Factor<br>Confidence Scoring</h2>
+        <p class="conf-desc">Every answer comes with a transparent, auditable confidence score — not a black-box percentage. Five independent factors are weighted and combined so you know exactly how much to trust each result.</p>
+        <br>
+        <div class="tag-list">
+          <span class="badge badge-green">HIGH ≥ 0.85</span>
+          <span class="badge badge-blue">MEDIUM ≥ 0.70</span>
+          <span class="badge badge-yellow">LOW ≥ 0.50</span>
+          <span class="badge" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)">VERY_LOW &lt; 0.50</span>
+        </div>
+      </div>
+      <div class="conf-factors">
+        <div class="conf-factor">
+          <div class="conf-factor-header">
+            <span class="conf-factor-name">Query Interpretation</span>
+            <span class="conf-factor-weight">25%</span>
+          </div>
+          <div class="conf-bar-track"><div class="conf-bar-fill" style="width:25%"></div></div>
+        </div>
+        <div class="conf-factor">
+          <div class="conf-factor-header">
+            <span class="conf-factor-name">Source Authority</span>
+            <span class="conf-factor-weight">25%</span>
+          </div>
+          <div class="conf-bar-track"><div class="conf-bar-fill" style="width:25%"></div></div>
+        </div>
+        <div class="conf-factor">
+          <div class="conf-factor-header">
+            <span class="conf-factor-name">Retrieval Match Quality</span>
+            <span class="conf-factor-weight">20%</span>
+          </div>
+          <div class="conf-bar-track"><div class="conf-bar-fill" style="width:20%"></div></div>
+        </div>
+        <div class="conf-factor">
+          <div class="conf-factor-header">
+            <span class="conf-factor-name">Data Recency</span>
+            <span class="conf-factor-weight">15%</span>
+          </div>
+          <div class="conf-bar-track"><div class="conf-bar-fill" style="width:15%"></div></div>
+        </div>
+        <div class="conf-factor">
+          <div class="conf-factor-header">
+            <span class="conf-factor-name">Computation Reliability</span>
+            <span class="conf-factor-weight">15%</span>
+          </div>
+          <div class="conf-bar-track"><div class="conf-bar-fill" style="width:15%"></div></div>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-top:8px">
+          Answers below 0.50 confidence with 2+ retrieval attempts automatically escalate to human review.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PIPELINE ARCHITECTURE ─────────────────────────────────── -->
+<section class="pipeline" id="pipeline">
+  <div class="container">
+    <div class="section-header fade-in">
+      <span class="badge badge-blue">Architecture</span>
+      <h2 style="margin-top:16px">Eight Agents,<br>One Pipeline</h2>
+      <p>LangGraph supervisor pattern — each agent is a specialist, coordinated by an orchestrator that aggregates results into a single coherent response.</p>
+    </div>
+    <div class="pipeline-visual fade-in">
+      <div class="pipe-step">
+        <div class="pipe-icon" aria-hidden="true">💬</div>
+        <div class="pipe-name">Intent<br>Classifier</div>
+        <div class="pipe-desc">6 intent types, 3 tiers</div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-icon" aria-hidden="true">🔎</div>
+        <div class="pipe-name">Query<br>Parser</div>
+        <div class="pipe-desc">DCID mapping, time normalization</div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-icon" aria-hidden="true">🗄️</div>
+        <div class="pipe-name">Data<br>Finder</div>
+        <div class="pipe-desc">DC → Vector → Direct APIs</div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-icon" aria-hidden="true">🏷️</div>
+        <div class="pipe-name">FAIRifier</div>
+        <div class="pipe-desc">Customizable metadata schemas</div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-icon" aria-hidden="true">📐</div>
+        <div class="pipe-name">Stats<br>Computer</div>
+        <div class="pipe-desc">Lookup, trend, inference</div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-icon" aria-hidden="true">📊</div>
+        <div class="pipe-name">Viz<br>Builder</div>
+        <div class="pipe-desc">Vega-Lite specs</div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-icon" aria-hidden="true">📎</div>
+        <div class="pipe-name">Citation<br>Builder</div>
+        <div class="pipe-desc">Government + academic</div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-icon" aria-hidden="true">📓</div>
+        <div class="pipe-name">Notebook<br>Generator</div>
+        <div class="pipe-desc">Colab-ready .ipynb</div>
+      </div>
+    </div>
+    <br><br>
+
+    <!-- Sample notebook cell preview -->
+    <div class="notebook-preview fade-in">
+      <div class="nb-header">
+        <span class="nb-header-icon" aria-hidden="true">📓</span>
+        <span class="nb-header-title">unemployment_tx_ca_comparison.ipynb</span>
+        <span class="nb-header-badge badge badge-green">Colab Ready</span>
+      </div>
+      <div class="nb-cells">
+        <div class="nb-cell">
+          <div class="nb-cell-header">
+            <span class="nb-cell-type md">Markdown</span>
+            <span style="margin-left:auto">Introduction</span>
+          </div>
+          <div class="nb-cell-body markdown">
+            <strong>Unemployment Rate: Texas vs California (2019–2024)</strong><br>
+            <span style="color:var(--muted)">This notebook compares annual unemployment rates between Texas and California using Bureau of Labor Statistics (BLS) Local Area Unemployment Statistics data.</span>
+          </div>
+        </div>
+        <div class="nb-cell">
+          <div class="nb-cell-header">
+            <span class="nb-cell-type code">Code</span>
+            <span style="margin-left:auto">Data Retrieval · BLS API</span>
+          </div>
+          <div class="nb-cell-body">
+            <span style="color:#60a5fa">import</span> <span style="color:var(--text)">requests, pandas</span> <span style="color:#60a5fa">as</span> <span style="color:var(--text)">pd</span><br>
+            <br>
+            <span style="color:var(--muted)"># BLS Series: LAUST480000000000003 (TX), LAUST060000000000003 (CA)</span><br>
+            <span style="color:#34d399">series_ids</span> = [<span style="color:#a78bfa">"LAUST480000000000003"</span>, <span style="color:#a78bfa">"LAUST060000000000003"</span>]<br>
+            <span style="color:#34d399">df</span> = fetch_bls_series(series_ids, start_year=<span style="color:#60a5fa">2019</span>, end_year=<span style="color:#60a5fa">2024</span>)
+          </div>
+        </div>
+        <div class="nb-cell">
+          <div class="nb-cell-header">
+            <span class="nb-cell-type md">Markdown</span>
+            <span style="margin-left:auto">Citations</span>
+          </div>
+          <div class="nb-cell-body markdown">
+            <span style="color:var(--muted)">1. U.S. Bureau of Labor Statistics. (2024). <em>Local Area Unemployment Statistics</em>. Series LAUST480000000000003. Retrieved May 2024 from https://api.bls.gov/publicAPI/v2/timeseries/data/<br>
+            2. U.S. Bureau of Labor Statistics. (2024). <em>Local Area Unemployment Statistics</em>. Series LAUST060000000000003. Retrieved May 2024 from https://api.bls.gov/publicAPI/v2/timeseries/data/</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ────────────────────────────────────────────────────── -->
+<section class="cta-section" id="get-started">
+  <div class="container-sm">
+    <span class="badge badge-blue">Get Started</span>
+    <h2 style="margin-top:20px">Ready to Ask Your<br><span class="gradient-text">First Question?</span></h2>
+    <p>Join researchers, journalists, and policy teams worldwide who use Data Concierge to get authoritative, citable answers from high-value public datasets — in seconds.</p>
+    <div class="cta-actions">
+      <a href="mailto:dataconcierge@dathere.com?subject=Data%20Concierge%20Access%20Request" class="btn-primary">
+        <span aria-hidden="true">✉</span> Request Access
+      </a>
+      <a href="https://github.com/dathere/Verikan" class="btn-secondary">
+        <span aria-hidden="true">⭐</span> View on GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-logo">
+        <div class="dot" aria-hidden="true"></div>
+        Data Concierge
+      </div>
+      <div class="footer-links">
+        <a href="#features">Features</a>
+        <a href="#data-sources">Data Sources</a>
+        <a href="#use-cases">Use Cases</a>
+        <a href="#pipeline">Architecture</a>
+      </div>
+      <div class="footer-copy">
+        LLM-agnostic · Powered by authoritative open data
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Scroll animation — feature-detect IntersectionObserver; show all if unsupported
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          observer.unobserve(e.target);
+        }
+      }),
+      { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
+    );
+    document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+  } else {
+    document.querySelectorAll('.fade-in').forEach(el => el.classList.add('visible'));
+  }
+
+  // Mobile nav toggle
+  const navToggle = document.querySelector('.nav-toggle');
+  const navMenu = document.querySelector('.nav-links');
+  if (navToggle && navMenu) {
+    navToggle.addEventListener('click', () => {
+      const open = navMenu.classList.toggle('open');
+      navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    navMenu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        navMenu.classList.remove('open');
+        navToggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+
+  // Smooth active nav link
+  const sections = document.querySelectorAll('section[id], div[id]');
+  const navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 80) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.style.color = a.getAttribute('href') === '#' + current ? 'var(--text)' : '';
+    });
+  }, { passive: true });
+</script>
+</body>
+</html>

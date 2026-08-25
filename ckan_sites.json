@@ -1,0 +1,41 @@
+{
+  "sites": [
+    {
+      "id": "wprdc",
+      "url": "https://data.wprdc.org",
+      "name": "Western PA Regional Data Center (WPRDC)",
+      "organization": "city-of-pittsburgh",
+      "description": "Open data portal for Pittsburgh and Western Pennsylvania. Contains 126+ datasets from the City of Pittsburgh including 311 requests, crime data, building permits, property assessments, community center attendance, traffic counts, and more.",
+      "quality_score": 0.85,
+      "keywords": [
+        "pittsburgh",
+        "allegheny",
+        "western pennsylvania",
+        "wprdc",
+        "311",
+        "crime",
+        "permits",
+        "property",
+        "community center"
+      ],
+      "added_by": "default",
+      "added_at": "2026-05-08T06:03:07.320616Z"
+    },
+    {
+      "id": "ckan",
+      "url": "https://data.dathere.com",
+      "name": "datHere CKAN Portal",
+      "organization": null,
+      "description": "General CKAN open data portal with diverse datasets.",
+      "quality_score": 0.85,
+      "keywords": [
+        "open data",
+        "datasets",
+        "csv",
+        "ckan"
+      ],
+      "added_by": "default",
+      "added_at": "2026-05-08T06:03:07.320636Z"
+    }
+  ]
+}

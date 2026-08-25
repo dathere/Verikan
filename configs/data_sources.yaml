@@ -1,0 +1,515 @@
+# Data Sources Configuration
+# Comprehensive configuration for all available data sources
+# This file is used in conjunction with the DataSourceRegistry
+
+# =============================================================================
+# Data Sources
+# =============================================================================
+
+data_sources:
+  # -------------------------------------------------------------------------
+  # Bureau of Labor Statistics (BLS)
+  # -------------------------------------------------------------------------
+  - id: bls
+    name: Bureau of Labor Statistics
+    type: api
+    base_url: https://www.bls.gov
+    api_url: https://api.bls.gov/publicAPI/v2
+    portal_url: https://data.bls.gov
+    description: >
+      Primary source for labor market data including employment, unemployment,
+      wages, productivity, and consumer prices. BLS is part of the U.S.
+      Department of Labor and produces essential economic statistics.
+    categories:
+      - employment
+      - unemployment
+      - wages
+      - prices
+    keywords:
+      - employment
+      - unemployment
+      - jobs
+      - labor
+      - wages
+      - salary
+      - cpi
+      - consumer price index
+      - inflation
+      - ppi
+      - producer price
+      - payroll
+      - workforce
+      - occupation
+    update_frequency: monthly
+    quality_score: 0.95
+    requires_key: true
+    rate_limit: 500/day
+    enabled: true
+    datasets:
+      - name: Current Employment Statistics (CES)
+        description: Monthly data on employment, hours, and earnings by industry
+        url: https://www.bls.gov/ces/
+        series_prefix: CE
+        update_frequency: monthly
+
+      - name: Local Area Unemployment Statistics (LAUS)
+        description: Monthly unemployment data for states, counties, and metropolitan areas
+        url: https://www.bls.gov/lau/
+        series_prefix: LA
+        update_frequency: monthly
+
+      - name: Consumer Price Index (CPI)
+        description: Monthly measure of price changes for consumer goods and services
+        url: https://www.bls.gov/cpi/
+        series_prefix: CU
+        update_frequency: monthly
+
+      - name: Producer Price Index (PPI)
+        description: Monthly index of selling prices received by domestic producers
+        url: https://www.bls.gov/ppi/
+        series_prefix: PC
+        update_frequency: monthly
+
+      - name: Occupational Employment and Wage Statistics (OEWS)
+        description: Employment and wage estimates by occupation and industry
+        url: https://www.bls.gov/oes/
+        update_frequency: annual
+
+      - name: Job Openings and Labor Turnover Survey (JOLTS)
+        description: Data on job openings, hires, and separations
+        url: https://www.bls.gov/jlt/
+        update_frequency: monthly
+
+    example_queries:
+      - What is the unemployment rate in California?
+      - How have wages changed over the past 5 years?
+      - What is the current CPI inflation rate?
+      - How many jobs were added last month?
+
+  # -------------------------------------------------------------------------
+  # U.S. Census Bureau
+  # -------------------------------------------------------------------------
+  - id: census
+    name: U.S. Census Bureau
+    type: api
+    base_url: https://www.census.gov
+    api_url: https://api.census.gov
+    portal_url: https://data.census.gov
+    description: >
+      Comprehensive demographic, economic, and geographic data about the
+      United States population and economy. The Census Bureau conducts the
+      decennial census and numerous ongoing surveys.
+    categories:
+      - demographics
+      - population
+      - income
+      - housing
+      - education
+    keywords:
+      - population
+      - demographics
+      - census
+      - income
+      - poverty
+      - housing
+      - education
+      - race
+      - ethnicity
+      - age
+      - gender
+      - household
+      - family
+      - migration
+    update_frequency: varies
+    quality_score: 0.95
+    requires_key: true
+    enabled: true
+    datasets:
+      - name: American Community Survey (ACS)
+        description: Annual survey providing detailed demographic, social, economic, and housing data
+        url: https://www.census.gov/programs-surveys/acs
+        endpoint: /data/acs/acs5
+        update_frequency: annual
+
+      - name: Decennial Census
+        description: Complete count of the U.S. population every 10 years
+        url: https://www.census.gov/programs-surveys/decennial-census.html
+        endpoint: /data/dec/
+        update_frequency: every 10 years
+
+      - name: Population Estimates Program
+        description: Annual estimates of population between census years
+        url: https://www.census.gov/programs-surveys/popest.html
+        endpoint: /data/pep/
+        update_frequency: annual
+
+      - name: County Business Patterns
+        description: Annual data on businesses by industry and geography
+        url: https://www.census.gov/programs-surveys/cbp.html
+        update_frequency: annual
+
+    example_queries:
+      - What is the population of Texas?
+      - What is the median household income by state?
+      - How has the population changed in urban vs rural areas?
+      - What is the poverty rate in different counties?
+
+  # -------------------------------------------------------------------------
+  # Bureau of Economic Analysis (BEA)
+  # -------------------------------------------------------------------------
+  - id: bea
+    name: Bureau of Economic Analysis
+    type: api
+    base_url: https://www.bea.gov
+    api_url: https://apps.bea.gov/api
+    portal_url: https://apps.bea.gov/iTable/
+    description: >
+      Economic statistics including GDP, personal income, corporate profits,
+      and international trade data. BEA is part of the U.S. Department of
+      Commerce and produces key measures of U.S. economic activity.
+    categories:
+      - gdp
+      - income
+      - trade
+    keywords:
+      - gdp
+      - gross domestic product
+      - economic growth
+      - recession
+      - personal income
+      - disposable income
+      - savings
+      - corporate profits
+      - trade deficit
+      - exports
+      - imports
+      - investment
+      - consumption
+    update_frequency: quarterly
+    quality_score: 0.95
+    requires_key: true
+    enabled: true
+    datasets:
+      - name: National Income and Product Accounts (NIPA)
+        description: Comprehensive measures of U.S. production, including GDP
+        url: https://www.bea.gov/data/gdp
+        update_frequency: quarterly
+
+      - name: Regional Economic Accounts
+        description: State and local area economic data including GDP by state
+        url: https://www.bea.gov/data/economic-accounts/regional
+        update_frequency: annual
+
+      - name: International Trade in Goods and Services
+        description: Monthly data on U.S. exports and imports
+        url: https://www.bea.gov/data/intl-trade-investment/international-trade-goods-and-services
+        update_frequency: monthly
+
+    example_queries:
+      - What is the current GDP growth rate?
+      - How does GDP vary by state?
+      - What is the U.S. trade deficit?
+      - What is the personal savings rate?
+
+  # -------------------------------------------------------------------------
+  # National Center for Science and Engineering Statistics (NCSES)
+  # -------------------------------------------------------------------------
+  - id: ncses
+    name: National Center for Science and Engineering Statistics
+    type: api
+    base_url: https://ncses..gov
+    api_url: https://ncses..gov/api
+    portal_url: https://ncses..gov/explore-data
+    description: >
+      Statistics on the science and engineering enterprise in the United States.
+      NCSES is part of the National Science Foundation and provides data on
+      R&D spending, STEM workforce, and science & technology indicators.
+    categories:
+      - science_engineering
+      - education
+    keywords:
+      - research
+      - development
+      - r&d
+      - science
+      - engineering
+      - stem
+      - phd
+      - doctorate
+      - graduate
+      - postdoc
+      - university
+      - federal funding
+      - innovation
+      - patents
+    update_frequency: annual
+    quality_score: 0.95
+    enabled: true
+    datasets:
+      - name: Survey of Federal Funds for R&D
+        description: Federal government obligations and outlays for R&D
+        url: https://ncses..gov/surveys/federal-funds-research-development/
+        update_frequency: annual
+
+      - name: Survey of Graduate Students and Postdoctorates
+        description: Data on graduate enrollment and postdoctoral appointees in S&E
+        url: https://ncses..gov/surveys/graduate-students-postdoctorates-science-engineering/
+        update_frequency: annual
+
+      - name: Business R&D Survey
+        description: R&D performed and funded by U.S. businesses
+        url: https://ncses..gov/surveys/business-research-development/
+        update_frequency: annual
+
+      - name: Scientists and Engineers Statistical Data System (SESTAT)
+        description: Data on the science and engineering workforce
+        url: https://ncses..gov/surveys/national-survey-college-graduates/
+        update_frequency: biennial
+
+    example_queries:
+      - How much does the federal government spend on R&D?
+      - How many STEM PhDs are awarded each year?
+      - What industries spend the most on research?
+      - What is the employment rate for science PhDs?
+
+  # -------------------------------------------------------------------------
+  # Centers for Disease Control and Prevention (CDC)
+  # -------------------------------------------------------------------------
+  - id: cdc
+    name: Centers for Disease Control and Prevention
+    type: portal
+    base_url: https://www.cdc.gov
+    api_url: https://data.cdc.gov/api
+    portal_url: https://data.cdc.gov
+    description: >
+      Public health data including mortality, disease surveillance, and health
+      indicators. CDC is the nation's leading public health agency.
+    categories:
+      - health
+    keywords:
+      - health
+      - disease
+      - mortality
+      - death
+      - birth
+      - vaccination
+      - epidemic
+      - pandemic
+      - covid
+      - flu
+      - chronic disease
+      - obesity
+      - smoking
+      - life expectancy
+    update_frequency: varies
+    quality_score: 0.92
+    enabled: true
+    datasets:
+      - name: National Vital Statistics System
+        description: Birth and death statistics for the U.S.
+        url: https://www.cdc.gov/nchs/nvss/index.htm
+        update_frequency: annual
+
+      - name: COVID-19 Data Tracker
+        description: COVID-19 cases, deaths, and vaccinations
+        url: https://covid.cdc.gov/covid-data-tracker/
+        update_frequency: weekly
+
+      - name: Behavioral Risk Factor Surveillance System (BRFSS)
+        description: Health-related risk behaviors, chronic conditions, and preventive services
+        url: https://www.cdc.gov/brfss/
+        update_frequency: annual
+
+    example_queries:
+      - What is the life expectancy in the United States?
+      - How do mortality rates vary by state?
+      - What are the leading causes of death?
+      - What are the COVID-19 vaccination rates?
+
+  # -------------------------------------------------------------------------
+  # Google Data Commons
+  # -------------------------------------------------------------------------
+  - id: data_commons
+    name: Google Data Commons
+    type: knowledge_graph
+    base_url: https://datacommons.org
+    api_url: https://api.datacommons.org
+    portal_url: https://datacommons.org/tools/timeline
+    description: >
+      Unified knowledge graph aggregating data from multiple sources including
+      federal agencies, international organizations, and academic institutions.
+      Provides a common data model for exploring diverse datasets.
+    categories:
+      - demographics
+      - employment
+      - health
+      - education
+      - environment
+      - general
+    keywords:
+      - unified data
+      - knowledge graph
+      - multiple sources
+      - aggregated
+      - population
+      - demographics
+      - economics
+      - health
+      - environment
+    update_frequency: continuous
+    quality_score: 0.90
+    enabled: true
+    datasets: []  # Data Commons aggregates from multiple sources
+
+    example_queries:
+      - Compare unemployment rates across states
+      - Show population trends over time
+      - What is the median income in different counties?
+      - How does education level vary by state?
+
+  # -------------------------------------------------------------------------
+  # CKAN Data Portal
+  # -------------------------------------------------------------------------
+  - id: ckan
+    name: CKAN Open Data Portal
+    type: portal
+    base_url: https://data.dathere.com
+    api_url: https://data.dathere.com/api/3
+    portal_url: https://data.dathere.com
+    description: >
+      Open data portal with semantic search capabilities. Contains diverse
+      datasets from various sources. Uses Pinecone for intelligent dataset
+      discovery and CKAN DataStore for data access.
+    categories:
+      - general
+    keywords:
+      - open data
+      - datasets
+      - csv
+      - json
+      - government data
+    update_frequency: varies
+    quality_score: 0.85
+    enabled: true
+    datasets: []  # Dynamic - discovered via semantic search
+
+    example_queries:
+      - Find datasets about climate change
+      - Search for transportation data
+      - What datasets are available about housing?
+      - Find data on energy consumption
+
+  # -------------------------------------------------------------------------
+  # Federal Reserve Economic Data (FRED)
+  # -------------------------------------------------------------------------
+  - id: fred
+    name: Federal Reserve Economic Data
+    type: api
+    base_url: https://fred.stlouisfed.org
+    api_url: https://api.stlouisfed.org/fred
+    portal_url: https://fred.stlouisfed.org
+    description: >
+      Economic data from the Federal Reserve Bank of St. Louis, including
+      interest rates, monetary aggregates, and economic indicators. FRED
+      contains hundreds of thousands of economic time series.
+    categories:
+      - gdp
+      - income
+      - prices
+      - employment
+    keywords:
+      - federal reserve
+      - interest rates
+      - monetary policy
+      - money supply
+      - inflation
+      - gdp
+      - unemployment
+      - economic indicators
+      - recession
+      - treasury
+      - bond yield
+    update_frequency: varies
+    quality_score: 0.95
+    requires_key: true
+    enabled: true
+    datasets:
+      - name: Interest Rates
+        description: Federal funds rate, Treasury yields, and other interest rates
+        url: https://fred.stlouisfed.org/categories/22
+        update_frequency: daily
+
+      - name: Economic Indicators
+        description: Key economic indicators including GDP, unemployment, and inflation
+        url: https://fred.stlouisfed.org/categories/32992
+        update_frequency: varies
+
+      - name: Money Supply
+        description: M1, M2, and other monetary aggregates
+        url: https://fred.stlouisfed.org/categories/24
+        update_frequency: weekly
+
+    example_queries:
+      - What is the current federal funds rate?
+      - How have interest rates changed over time?
+      - What are the leading economic indicators?
+      - What is the current 10-year Treasury yield?
+
+
+# =============================================================================
+# Retrieval Configuration
+# =============================================================================
+
+retrieval:
+  # Primary retrieval method
+  primary: knowledge_graph
+
+  # Fallback order when primary fails
+  fallback_order:
+    - vector_search
+    - direct_api
+
+  # Result fusion weights
+  fusion_weights:
+    source_authority: 0.4
+    retrieval_score: 0.3
+    recency: 0.3
+
+  # Maximum results to return
+  max_results: 10
+
+  # Minimum score threshold
+  min_score: 0.5
+
+
+# =============================================================================
+# Concierge Configuration
+# =============================================================================
+
+concierge:
+  # Default mode when user doesn't specify
+  default_mode: recommend
+
+  # Keywords that suggest user wants actual data analysis (not just links)
+  analysis_keywords:
+    - what is
+    - how much
+    - how many
+    - compare
+    - trend
+    - over time
+    - change
+    - increase
+    - decrease
+    - rate
+    - statistics
+    - numbers
+    - data for
+    - latest
+    - current
+
+  # Maximum recommendations to show
+  max_recommendations: 5
+
+  # Include example queries in recommendations
+  include_examples: true

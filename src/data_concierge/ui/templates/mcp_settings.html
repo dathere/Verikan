@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verikan · MCP Servers</title>
+    <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg?v=20260713-redesign">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650;700;750&display=swap" rel="stylesheet">
+    <link href="/static/css/style.css?v=20260713-redesign" rel="stylesheet">
+    <style>
+        .mcp-page {
+            padding-top: calc(var(--dc-navbar-h) + 1.75rem);
+            padding-bottom: 3rem;
+        }
+    </style>
+    <script>
+        (function() {
+            var s = localStorage.getItem('dc-theme') || 'light';
+            document.documentElement.setAttribute('data-bs-theme', s);
+        })();
+    </script>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar fixed-top" aria-label="Main">
+        <div class="container-fluid px-0">
+            <a class="navbar-brand d-flex align-items-center mb-0" href="/">
+                <img src="/static/images/logo-light.svg" alt="Verikan" class="dc-logo">
+                <span class="brand-lockup">
+                    <span class="brand-name">Verikan</span>
+                    <span class="brand-sub">Data Concierge</span>
+                </span>
+                <span class="dc-tag dc-tag-admin">MCP</span>
+            </a>
+            <div class="nav-cluster">
+                <button class="theme-toggle" id="themeToggle" type="button"
+                        aria-label="Toggle light or dark mode" title="Toggle light/dark mode"
+                        onclick="toggleTheme()">
+                    <i class="bi bi-moon-stars" aria-hidden="true"></i>
+                </button>
+                <a href="/docs" class="btn btn-outline-secondary btn-sm" title="Open the user guide">
+                    <i class="bi bi-question-circle me-1" aria-hidden="true"></i><span class="btn-label">Help</span>
+                </a>
+                <a href="/admin" class="btn btn-outline-secondary btn-sm" title="Open the admin dashboard">
+                    <i class="bi bi-speedometer2 me-1" aria-hidden="true"></i><span class="btn-label">Admin</span>
+                </a>
+                <a href="/" class="btn btn-primary btn-sm" title="Back to Chat">
+                    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i><span class="btn-label">Back to Chat</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mcp-page">
+        <!-- Header -->
+        <div class="pane-header">
+            <div>
+                <h1 class="admin-page-title"><i class="bi bi-plug me-2" aria-hidden="true"></i>MCP Servers</h1>
+                <p class="admin-page-sub mb-0">
+                    Connect Model Context Protocol (MCP) servers to extend Verikan
+                    with additional data sources and tools.
+                </p>
+            </div>
+            <div class="pane-actions">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addServerModal">
+                    <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>Add Server
+                </button>
+            </div>
+        </div>
+
+        <!-- Server List -->
+        <div id="serverList" class="row g-3">
+            <div class="col-12 empty-state">
+                <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                Loading MCP servers…
+            </div>
+        </div>
+    </div>
+
+    <footer class="site-footer">
+        <div class="site-footer-inner">
+            <div class="footer-brand">
+                <a href="https://dathere.com" target="_blank" rel="noopener"
+                   class="d-inline-flex align-items-center" aria-label="datHere home">
+                    <img src="/static/images/logo-light.svg" alt="datHere" class="dc-logo footer-logo">
+                </a>
+                <p class="footer-tagline">Verikan is built by datHere — data wrangling, redefined.</p>
+            </div>
+            <nav class="footer-links" aria-label="datHere">
+                <div class="footer-col">
+                    <span class="footer-col-title">Verikan</span>
+                    <a href="/library">Verified Library</a>
+                    <a href="/docs">User Guide</a>
+                    <a href="https://dathere.com/contact/" target="_blank" rel="noopener">Contact <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
+                </div>
+            </nav>
+        </div>
+        <div class="site-footer-bottom">
+            <span>© 2026 datHere. All rights reserved.</span>
+            <span>The verified Data Concierge</span>
+        </div>
+    </footer>
+
+    <!-- Add Server Modal -->
+    <div class="modal fade" id="addServerModal" tabindex="-1" aria-labelledby="addServerModalTitle">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addServerModalTitle"><i class="bi bi-plus-circle me-2" aria-hidden="true"></i>Add MCP Server</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addServerForm">
+                        <div class="mb-3">
+                            <label class="form-label" for="serverName">
+                                Server Name <span class="text-danger" aria-hidden="true">*</span>
+                            </label>
+                            <input type="text" class="form-control" id="serverName" required
+                                   placeholder="e.g., Census Bureau MCP">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="serverDescription">Description</label>
+                            <textarea class="form-control" id="serverDescription" rows="2"
+                                      placeholder="What data does this server provide?"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label d-block">Transport Type</label>
+                            <div class="btn-group w-100" role="group" aria-label="Transport type">
+                                <input type="radio" class="btn-check" name="transport" id="transportStdio" value="stdio" checked>
+                                <label class="btn btn-outline-primary" for="transportStdio">
+                                    <i class="bi bi-terminal me-1" aria-hidden="true"></i>stdio (Process)
+                                </label>
+                                <input type="radio" class="btn-check" name="transport" id="transportSse" value="sse">
+                                <label class="btn btn-outline-primary" for="transportSse">
+                                    <i class="bi bi-broadcast me-1" aria-hidden="true"></i>SSE
+                                </label>
+                                <input type="radio" class="btn-check" name="transport" id="transportHttp" value="streamable_http">
+                                <label class="btn btn-outline-primary" for="transportHttp">
+                                    <i class="bi bi-globe me-1" aria-hidden="true"></i>Streamable HTTP
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- stdio fields -->
+                        <div id="stdioFields">
+                            <div class="mb-3">
+                                <label class="form-label" for="serverCommand">
+                                    Command <span class="text-danger" aria-hidden="true">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="serverCommand"
+                                       placeholder="e.g., docker, npx, node">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="serverArgs">Arguments (one per line)</label>
+                                <textarea class="form-control" id="serverArgs" rows="3"
+                                          placeholder="compose&#10;--profile&#10;prod&#10;run&#10;--rm&#10;census-mcp"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="serverEnv">Environment Variables (KEY=VALUE, one per line)</label>
+                                <textarea class="form-control" id="serverEnv" rows="2"
+                                          placeholder="API_KEY=your-key&#10;PORT=3000"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="serverWorkingDir">Working Directory</label>
+                                <input type="text" class="form-control" id="serverWorkingDir"
+                                       placeholder="e.g., /path/to/mcp-server-project">
+                                <div class="form-text">
+                                    Directory where the command will run (cwd). Required for Docker-based
+                                    MCP servers in separate project directories.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- URL fields (SSE / streamable HTTP) -->
+                        <div id="sseFields" class="d-none">
+                            <div class="mb-3">
+                                <label class="form-label" for="serverUrl">
+                                    Server URL <span class="text-danger" aria-hidden="true">*</span>
+                                </label>
+                                <input type="url" class="form-control" id="serverUrl"
+                                       placeholder="http://localhost:3000/mcp">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="serverCategories">Categories (comma-separated)</label>
+                            <input type="text" class="form-control" id="serverCategories"
+                                   placeholder="demographics, population, census">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="serverKeywords">Keywords (comma-separated)</label>
+                            <input type="text" class="form-control" id="serverKeywords"
+                                   placeholder="census, population, fips, geography">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="serverAutoConnect">
+                            <label class="form-check-label" for="serverAutoConnect">
+                                Auto-connect on startup
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="addServerBtn">
+                        <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>Add Server
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tool Call Modal -->
+    <div class="modal fade" id="toolCallModal" tabindex="-1" aria-labelledby="toolCallTitle">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="toolCallTitle">Call Tool</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="toolCallArgs">Arguments (JSON)</label>
+                        <textarea class="form-control font-monospace" id="toolCallArgs" rows="6"
+                                  placeholder='{"param": "value"}'>{}</textarea>
+                    </div>
+                    <div id="toolCallResult" class="d-none">
+                        <label class="form-label">Result</label>
+                        <pre class="rounded-code-block p-3 rounded" style="max-height: 400px; overflow: auto;"><code id="toolCallResultText"></code></pre>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="executeToolBtn">
+                        <i class="bi bi-play me-2" aria-hidden="true"></i>Execute
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <i class="bi bi-info-circle me-2 text-primary" aria-hidden="true"></i>
+                <strong class="me-auto">Notice</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="toastBody"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/mcp.js?v=20260713-redesign"></script>
+    <script src="/static/js/theme.js?v=20260713-redesign"></script>
+</body>
+</html>

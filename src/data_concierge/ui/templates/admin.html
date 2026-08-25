@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verikan · Admin</title>
+    <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg?v=20260630-verikan">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650;700;750&display=swap" rel="stylesheet">
+    <link id="hljs-theme-dark" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" rel="stylesheet" disabled>
+    <link id="hljs-theme-light" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css" rel="stylesheet">
+    <link href="/static/css/style.css?v=20260713-redesign" rel="stylesheet">
+    <script>
+        (function() {
+            var s = localStorage.getItem('dc-theme') || 'light';
+            document.documentElement.setAttribute('data-bs-theme', s);
+        })();
+    </script>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar fixed-top" aria-label="Main">
+        <div class="container-fluid px-0">
+            <a class="navbar-brand d-flex align-items-center mb-0" href="/">
+                <img src="/static/images/logo-light.svg" alt="Verikan" class="dc-logo">
+                <span class="brand-lockup">
+                    <span class="brand-name">Verikan</span>
+                    <span class="brand-sub">Data Concierge</span>
+                </span>
+                <span class="dc-tag dc-tag-admin">Admin</span>
+            </a>
+            <div class="nav-cluster">
+                <span class="text-muted small d-none auth-chip" id="adminIdentity"></span>
+                <button class="theme-toggle" id="themeToggle" type="button"
+                        aria-label="Toggle light or dark mode" title="Toggle light/dark mode"
+                        onclick="toggleTheme()">
+                    <i class="bi bi-moon-stars" aria-hidden="true"></i>
+                </button>
+                <a href="/docs" class="btn btn-outline-secondary btn-sm" title="Open the user guide">
+                    <i class="bi bi-question-circle me-1" aria-hidden="true"></i><span class="btn-label">Help</span>
+                </a>
+                <a href="/" class="btn btn-primary btn-sm" title="Back to Chat">
+                    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i><span class="btn-label">Back to Chat</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid admin-container">
+        <div class="mb-3">
+            <h1 class="admin-page-title">Admin Dashboard</h1>
+            <p class="admin-page-sub mb-0">Review submissions, manage access, and configure the concierge.</p>
+        </div>
+
+        <div class="admin-layout">
+            <!-- Grouped section nav (Bootstrap tab buttons — ids unchanged) -->
+            <nav class="admin-nav" id="adminTabs" role="tablist" aria-orientation="vertical" aria-label="Admin sections">
+                <div class="admin-nav-group">Overview</div>
+                <button class="nav-link active" id="overview-tab" data-bs-toggle="tab"
+                        data-bs-target="#overview" type="button" role="tab" aria-controls="overview">
+                    <i class="bi bi-grid-1x2" aria-hidden="true"></i>Dashboard
+                </button>
+
+                <div class="admin-nav-group">Review</div>
+                <button class="nav-link" id="pending-tab" data-bs-toggle="tab"
+                        data-bs-target="#pending" type="button" role="tab" aria-controls="pending">
+                    <i class="bi bi-hourglass-split" aria-hidden="true"></i>Pending Review
+                    <span class="badge bg-warning" id="pendingBadge">0</span>
+                </button>
+                <button class="nav-link" id="all-tab" data-bs-toggle="tab"
+                        data-bs-target="#all" type="button" role="tab" aria-controls="all">
+                    <i class="bi bi-list-ul" aria-hidden="true"></i>All Submissions
+                </button>
+                <button class="nav-link" id="verified-tab" data-bs-toggle="tab"
+                        data-bs-target="#verified" type="button" role="tab" aria-controls="verified">
+                    <i class="bi bi-patch-check" aria-hidden="true"></i>Verified Library
+                </button>
+                <button class="nav-link" id="search-tab" data-bs-toggle="tab"
+                        data-bs-target="#search" type="button" role="tab" aria-controls="search">
+                    <i class="bi bi-search" aria-hidden="true"></i>Search
+                </button>
+
+                <div class="admin-nav-group">Access</div>
+                <button class="nav-link" id="approved-tab" data-bs-toggle="tab"
+                        data-bs-target="#approved" type="button" role="tab" aria-controls="approved">
+                    <i class="bi bi-person-check" aria-hidden="true"></i>Approved Members
+                    <span class="badge bg-warning d-none" id="approvedTabBadge">0</span>
+                </button>
+                <button class="nav-link" id="admins-tab" data-bs-toggle="tab"
+                        data-bs-target="#admins" type="button" role="tab" aria-controls="admins">
+                    <i class="bi bi-shield-lock" aria-hidden="true"></i>Admins
+                </button>
+
+                <div class="admin-nav-group">Data &amp; Integrations</div>
+                <button class="nav-link" id="mcp-tab" data-bs-toggle="tab"
+                        data-bs-target="#mcp" type="button" role="tab" aria-controls="mcp">
+                    <i class="bi bi-plug" aria-hidden="true"></i>MCP Servers
+                </button>
+                <button class="nav-link" id="ckansites-tab" data-bs-toggle="tab"
+                        data-bs-target="#ckansites" type="button" role="tab" aria-controls="ckansites">
+                    <i class="bi bi-globe" aria-hidden="true"></i>CKAN Sites
+                </button>
+
+                <div class="admin-nav-group">Insights</div>
+                <button class="nav-link" id="querylogs-tab" data-bs-toggle="tab"
+                        data-bs-target="#querylogs" type="button" role="tab" aria-controls="querylogs">
+                    <i class="bi bi-journal-text" aria-hidden="true"></i>Query Logs
+                </button>
+                <button class="nav-link" id="nbreviews-tab" data-bs-toggle="tab"
+                        data-bs-target="#nbreviews" type="button" role="tab" aria-controls="nbreviews">
+                    <i class="bi bi-clipboard2-check" aria-hidden="true"></i>Notebook Reviews
+                </button>
+                <button class="nav-link" id="feedback-tab" data-bs-toggle="tab"
+                        data-bs-target="#feedback" type="button" role="tab" aria-controls="feedback">
+                    <i class="bi bi-hand-thumbs-up" aria-hidden="true"></i>Feedback
+                </button>
+
+                <div class="admin-nav-group">Configuration</div>
+                <button class="nav-link" id="landing-tab" data-bs-toggle="tab"
+                        data-bs-target="#landing" type="button" role="tab" aria-controls="landing">
+                    <i class="bi bi-window" aria-hidden="true"></i>Landing Page
+                </button>
+                <button class="nav-link" id="systemprompt-tab" data-bs-toggle="tab"
+                        data-bs-target="#systemprompt" type="button" role="tab" aria-controls="systemprompt">
+                    <i class="bi bi-robot" aria-hidden="true"></i>Prompts
+                </button>
+                <button class="nav-link" id="runtime-tab" data-bs-toggle="tab"
+                        data-bs-target="#runtime" type="button" role="tab" aria-controls="runtime">
+                    <i class="bi bi-stopwatch" aria-hidden="true"></i>Query Settings
+                </button>
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab"
+                        data-bs-target="#settings" type="button" role="tab" aria-controls="settings">
+                    <i class="bi bi-github" aria-hidden="true"></i>GitHub Publishing
+                </button>
+            </nav>
+
+            <div class="admin-main">
+            <div class="tab-content" id="adminTabContent">
+            <!-- Overview Tab -->
+            <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
+                <div class="p-4">
+                    <!-- Stat cards -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-6 col-sm-4 col-xxl-2">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-primary"><i class="bi bi-collection"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="statTotal">0</div>
+                                    <div class="stat-label">Submissions</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-4 col-xxl-2">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-warning"><i class="bi bi-hourglass-split"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="statPending">0</div>
+                                    <div class="stat-label">Pending</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-4 col-xxl-2">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-success"><i class="bi bi-check2-circle"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="statApproved">0</div>
+                                    <div class="stat-label">Approved</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-4 col-xxl-2">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-danger"><i class="bi bi-x-circle"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="statRejected">0</div>
+                                    <div class="stat-label">Rejected</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-4 col-xxl-2">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-info"><i class="bi bi-patch-check"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="statVerified">0</div>
+                                    <div class="stat-label">Verified</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-4 col-xxl-2">
+                            <div class="stat-card" title="How many times verified answers were served from the library">
+                                <span class="stat-icon tone-muted"><i class="bi bi-bar-chart-line"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="statUsage">0</div>
+                                    <div class="stat-label">Cache Reuses</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Overview charts -->
+                    <div class="row g-3">
+                        <div class="col-lg-5">
+                            <div class="chart-card">
+                                <div class="chart-card-title"><i class="bi bi-pie-chart"></i>Submission status</div>
+                                <div id="statusDonut">
+                                    <div class="activity-empty">Loading…</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="chart-card">
+                                <div class="chart-card-title"><i class="bi bi-activity"></i>Query activity · last 14 days</div>
+                                <div id="activityChart">
+                                    <div class="activity-empty">Loading…</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pending Review Tab -->
+            <div class="tab-pane fade" id="pending" role="tabpanel" aria-labelledby="pending-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-hourglass-split" aria-hidden="true"></i>Pending Review</h2>
+                            <p class="pane-sub">Notebook submissions waiting for approval or rejection.</p>
+                        </div>
+                    </div>
+                    <div id="pendingList">
+                        <div class="empty-state">
+                            <i class="bi bi-inbox" aria-hidden="true"></i>
+                            <p class="mt-2 mb-0">Loading submissions…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- All Submissions Tab -->
+            <div class="tab-pane fade" id="all" role="tabpanel" aria-labelledby="all-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-list-ul" aria-hidden="true"></i>All Submissions</h2>
+                            <p class="pane-sub">Full submission history, filterable by status.</p>
+                        </div>
+                        <div class="pane-actions">
+                            <label class="visually-hidden" for="statusFilter">Filter by status</label>
+                            <select class="form-select w-auto" id="statusFilter">
+                                <option value="all">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="allList">
+                        <div class="empty-state">
+                            <i class="bi bi-inbox" aria-hidden="true"></i>
+                            <p class="mt-2 mb-0">Loading…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Verified Library Tab -->
+            <div class="tab-pane fade" id="verified" role="tabpanel" aria-labelledby="verified-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-patch-check" aria-hidden="true"></i>Verified Library</h2>
+                            <p class="pane-sub">
+                                The configured GitHub repo is the source of truth.
+                                Edits made on GitHub flow back automatically when a notebook is fetched,
+                                or click <em>Sync from GitHub</em> to refresh the local cache now.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <button id="backfillEvidenceBtn" class="btn btn-sm btn-outline-secondary"
+                                    onclick="backfillEvidence()"
+                                    title="Build + store a Typed Standards evidence package for every verified notebook so each gets a verify link">
+                                <i class="bi bi-shield-check me-1" aria-hidden="true"></i>Backfill evidence
+                            </button>
+                            <button id="syncFromGithubBtn" class="btn btn-sm btn-outline-secondary"
+                                    onclick="syncVerifiedFromGitHub()">
+                                <i class="bi bi-cloud-download me-1" aria-hidden="true"></i>Sync from GitHub
+                            </button>
+                        </div>
+                    </div>
+                    <div id="verifiedList">
+                        <div class="empty-state">
+                            <i class="bi bi-collection" aria-hidden="true"></i>
+                            <p class="mt-2 mb-0">Loading verified notebooks…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Tab -->
+            <div class="tab-pane fade" id="search" role="tabpanel" aria-labelledby="search-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-search" aria-hidden="true"></i>Similarity Search</h2>
+                            <p class="pane-sub">Test semantic search against the verified notebook library.</p>
+                        </div>
+                    </div>
+                    <label class="visually-hidden" for="searchInput">Search the verified library</label>
+                    <div class="input-group mb-4 pane-narrow">
+                        <input type="text" class="form-control" id="searchInput"
+                               placeholder="Enter a question to search…">
+                        <button class="btn btn-primary" type="button" id="searchBtn">
+                            <i class="bi bi-search me-2" aria-hidden="true"></i>Search
+                        </button>
+                    </div>
+                    <div id="searchResults"></div>
+                </div>
+            </div>
+
+            <!-- Approved Members Tab -->
+            <div class="tab-pane fade" id="approved" role="tabpanel" aria-labelledby="approved-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-person-check" aria-hidden="true"></i>Approved Members</h2>
+                            <p class="pane-sub">
+                                Only emails on this list can sign in via social login. Users that
+                                authenticate but are not on the list see a "pending verification"
+                                page until an admin adds them.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Pending Access Requests -->
+                    <div id="pendingRequestsSection" class="d-none mb-4">
+                        <h3 class="text-muted text-uppercase small fw-bold mb-3">
+                            <i class="bi bi-bell-fill text-warning me-1" aria-hidden="true"></i>
+                            Pending Access Requests
+                            <span class="badge bg-warning ms-1" id="pendingRequestsBadge">0</span>
+                        </h3>
+                        <div id="pendingRequestsList"></div>
+                    </div>
+
+                    <div class="card mb-4 pane-narrow">
+                        <div class="card-header">
+                            <i class="bi bi-envelope-plus me-2" aria-hidden="true"></i>Add Approved Email
+                        </div>
+                        <div class="card-body">
+                            <div id="addApprovedAlert"></div>
+                            <form id="addApprovedForm">
+                                <div class="mb-3">
+                                    <label for="approvedEmail" class="form-label">
+                                        Email Address <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <input type="email" class="form-control" id="approvedEmail"
+                                           placeholder="name@example.com" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-check2-circle me-2" aria-hidden="true"></i>Approve
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <h3 class="text-muted text-uppercase small fw-bold mb-3">Current Approved List</h3>
+                    <div id="approvedList">
+                        <div class="empty-state">
+                            <i class="bi bi-person-check" aria-hidden="true"></i>
+                            <p class="mt-2 mb-0">Loading approved members…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admins Tab -->
+            <div class="tab-pane fade" id="admins" role="tabpanel" aria-labelledby="admins-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-shield-lock" aria-hidden="true"></i>Admin Management</h2>
+                            <p class="pane-sub">
+                                Admins can review submissions, manage users, and configure settings.
+                                Grant admin access to any logged-in user by username or email.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 pane-narrow">
+                        <div class="card-header">
+                            <i class="bi bi-person-plus-fill me-2" aria-hidden="true"></i>Grant Admin Access
+                        </div>
+                        <div class="card-body">
+                            <div id="addAdminAlert"></div>
+                            <form id="addAdminForm">
+                                <div class="mb-3">
+                                    <label for="adminUserId" class="form-label">
+                                        Username or Email <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <input type="text" class="form-control" id="adminUserId"
+                                           placeholder="e.g. user@example.com or username" required>
+                                    <div class="form-text">
+                                        Enter the username (for password users) or email (for social-login users).
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-shield-plus me-2" aria-hidden="true"></i>Grant Admin
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <h3 class="text-muted text-uppercase small fw-bold mb-3">Current Admins</h3>
+                    <div id="adminList">
+                        <div class="empty-state">
+                            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                            <p class="mt-2 mb-0">Loading admins…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Query Logs Tab -->
+            <div class="tab-pane fade" id="querylogs" role="tabpanel" aria-labelledby="querylogs-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-journal-text" aria-hidden="true"></i>User Query Logs</h2>
+                            <p class="pane-sub">
+                                Every question asked by a logged-in user, whether served from a
+                                verified (cached) notebook or freshly generated.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <button class="btn btn-outline-secondary btn-sm" id="qlRefreshBtn">
+                                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Summary cards -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-6 col-md">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-primary"><i class="bi bi-chat-square-text"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="qlTotal">0</div>
+                                    <div class="stat-label">Total Queries</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-success"><i class="bi bi-stars"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="qlGenerated">0</div>
+                                    <div class="stat-label">Generated</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-info"><i class="bi bi-patch-check"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="qlCached">0</div>
+                                    <div class="stat-label">Verified Cache Hits</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card" title="Share of answerable queries served instantly from the verified library (excludes errors)">
+                                <span class="stat-icon tone-primary"><i class="bi bi-lightning-charge"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="qlHitRate">—</div>
+                                    <div class="stat-label">Cache Hit Rate</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-muted"><i class="bi bi-people"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="qlUsers">0</div>
+                                    <div class="stat-label">Unique Users</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="d-flex gap-2 mb-3 flex-wrap">
+                        <label class="visually-hidden" for="qlUserFilter">Filter by user</label>
+                        <select class="form-select w-auto" id="qlUserFilter">
+                            <option value="">All users</option>
+                        </select>
+                        <label class="visually-hidden" for="qlSourceFilter">Filter by source</label>
+                        <select class="form-select w-auto" id="qlSourceFilter">
+                            <option value="">All sources</option>
+                            <option value="generated">Generated</option>
+                            <option value="verified_cache">Verified cache</option>
+                            <option value="revision">Notebook revisions</option>
+                            <option value="error">Errors</option>
+                        </select>
+                    </div>
+
+                    <!-- Log table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle small">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>User</th>
+                                    <th>Query</th>
+                                    <th>Source</th>
+                                    <th>Tier</th>
+                                    <th>Confidence</th>
+                                    <th>Tokens</th>
+                                    <th>Time&nbsp;(ms)</th>
+                                    <th>Notebook</th>
+                                </tr>
+                            </thead>
+                            <tbody id="queryLogsBody">
+                                <tr><td colspan="9" class="text-center text-muted py-4">Loading logs…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notebook Reviews Tab -->
+            <div class="tab-pane fade" id="nbreviews" role="tabpanel" aria-labelledby="nbreviews-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-clipboard2-check" aria-hidden="true"></i>Notebook Reviews</h2>
+                            <p class="pane-sub">
+                                Every generated notebook is executed, reconciled against its answer,
+                                and adversarially reviewed as soon as it is created.
+                                The combined verdict feeds the notebook-verification confidence factor.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <button class="btn btn-outline-secondary btn-sm" id="nbrRefreshBtn">
+                                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Summary cards -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-6 col-md">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-primary"><i class="bi bi-journal-code"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="nbrTotal">0</div>
+                                    <div class="stat-label">Notebooks Checked</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card" title="Notebooks that executed top to bottom without error">
+                                <span class="stat-icon tone-success"><i class="bi bi-play-circle"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="nbrExecuted">0</div>
+                                    <div class="stat-label">Executed OK</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card" title="Notebooks that received an adversarial method review">
+                                <span class="stat-icon tone-info"><i class="bi bi-shield-check"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="nbrReviewed">0</div>
+                                    <div class="stat-label">Reviewed</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card" title="Review findings across all notebooks, by severity">
+                                <span class="stat-icon tone-warning"><i class="bi bi-exclamation-triangle"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="nbrFindings">0</div>
+                                    <div class="stat-label">Findings</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card" title="Average combined verification + review score">
+                                <span class="stat-icon tone-primary"><i class="bi bi-speedometer2"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="nbrAvgScore">—</div>
+                                    <div class="stat-label">Avg Score</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="d-flex gap-2 mb-3 flex-wrap">
+                        <label class="visually-hidden" for="nbrStatusFilter">Filter by status</label>
+                        <select class="form-select w-auto" id="nbrStatusFilter">
+                            <option value="">All statuses</option>
+                            <option value="complete">Complete</option>
+                            <option value="pending">Pending</option>
+                            <option value="error">Errors</option>
+                        </select>
+                        <label class="visually-hidden" for="nbrFindingsFilter">Filter by findings</label>
+                        <select class="form-select w-auto" id="nbrFindingsFilter">
+                            <option value="">All results</option>
+                            <option value="with">With findings</option>
+                            <option value="clean">Clean reviews</option>
+                        </select>
+                    </div>
+
+                    <!-- Reviews table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle small">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Query</th>
+                                    <th>Status</th>
+                                    <th>Executed</th>
+                                    <th>Reconciled</th>
+                                    <th>Review</th>
+                                    <th>Score</th>
+                                    <th>Confidence</th>
+                                </tr>
+                            </thead>
+                            <tbody id="nbReviewsBody">
+                                <tr><td colspan="8" class="text-center text-muted py-4">Loading reviews…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feedback Tab -->
+            <div class="tab-pane fade" id="feedback" role="tabpanel" aria-labelledby="feedback-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-hand-thumbs-up" aria-hidden="true"></i>Answer Feedback</h2>
+                            <p class="pane-sub">
+                                Thumbs up/down that users left on answers. Down-voted answers are
+                                candidates to fix or verify; up-voted generated answers are candidates
+                                to promote into the verified library.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <button class="btn btn-outline-secondary btn-sm" id="fbRefreshBtn">
+                                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Summary cards -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-6 col-md">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-primary"><i class="bi bi-chat-square-heart"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="fbTotal">0</div>
+                                    <div class="stat-label">Total Ratings</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-success"><i class="bi bi-hand-thumbs-up"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="fbUp">0</div>
+                                    <div class="stat-label">Helpful</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card">
+                                <span class="stat-icon tone-danger"><i class="bi bi-hand-thumbs-down"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="fbDown">0</div>
+                                    <div class="stat-label">Not Helpful</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md">
+                            <div class="stat-card" title="Share of ratings that were positive">
+                                <span class="stat-icon tone-info"><i class="bi bi-emoji-smile"></i></span>
+                                <div class="stat-meta">
+                                    <div class="stat-value" id="fbSatisfaction">—</div>
+                                    <div class="stat-label">Satisfaction</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter -->
+                    <div class="d-flex gap-2 mb-3 flex-wrap">
+                        <label class="visually-hidden" for="fbFilter">Filter by rating</label>
+                        <select class="form-select w-auto" id="fbFilter">
+                            <option value="">All ratings</option>
+                            <option value="up">Helpful only</option>
+                            <option value="down">Not helpful only</option>
+                        </select>
+                    </div>
+
+                    <div id="feedbackList">
+                        <div class="empty-state">
+                            <i class="bi bi-hand-thumbs-up" aria-hidden="true"></i>
+                            <p class="mt-2 mb-0">Loading feedback…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MCP Servers Tab -->
+            <div class="tab-pane fade" id="mcp" role="tabpanel" aria-labelledby="mcp-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-plug" aria-hidden="true"></i>MCP Servers</h2>
+                            <p class="pane-sub">
+                                Connect Model Context Protocol servers to extend Verikan
+                                with additional data sources and tools.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addMcpServerModal">
+                                <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>Add Server
+                            </button>
+                        </div>
+                    </div>
+                    <div id="mcpServerList" class="row g-3">
+                        <div class="col-12 empty-state">
+                            <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                            Loading MCP servers…
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CKAN Sites Tab -->
+            <div class="tab-pane fade" id="ckansites" role="tabpanel" aria-labelledby="ckansites-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-globe" aria-hidden="true"></i>CKAN Sites</h2>
+                            <p class="pane-sub">
+                                Register CKAN open data portals (like Pittsburgh&rsquo;s WPRDC) that the
+                                agent should search when answering questions. Registered sites are
+                                available immediately &mdash; no restart required.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCkanSiteModal">
+                                <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>Add Site
+                            </button>
+                        </div>
+                    </div>
+                    <div id="ckanSiteList" class="row g-3">
+                        <div class="col-12 empty-state">
+                            <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                            Loading CKAN sites…
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Landing Page Tab -->
+            <div class="tab-pane fade" id="landing" role="tabpanel" aria-labelledby="landing-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-window" aria-hidden="true"></i>Landing Page</h2>
+                            <p class="pane-sub">
+                                Customize the phrasing shown on the public landing page. Leave a
+                                field blank to hide that section.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <a href="/" target="_blank" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Preview
+                            </a>
+                        </div>
+                    </div>
+
+                    <div id="landingSettingsAlert"></div>
+
+                    <form id="landingSettingsForm" class="pane-narrow">
+                        <h3 class="text-uppercase text-muted small fw-bold mb-3">Above the prompt</h3>
+                        <div class="mb-3">
+                            <label for="lpTitle" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="lpTitle" placeholder="Verikan">
+                        </div>
+                        <div class="mb-3">
+                            <label for="lpTagline" class="form-label">Tagline</label>
+                            <input type="text" class="form-control" id="lpTagline" placeholder="The verified Data Concierge">
+                            <div class="form-text">Short line shown above the title (and in the browser tab).</div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="lpShowBeta">
+                            <label class="form-check-label" for="lpShowBeta">Show "Beta" badge</label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="lpLogoUrl" class="form-label">Logo URL</label>
+                            <input type="text" class="form-control" id="lpLogoUrl" placeholder="/static/images/logo.png">
+                            <div class="form-text">Path or full URL to the logo image.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="lpCallToAction" class="form-label">Call to action</label>
+                            <textarea class="form-control" id="lpCallToAction" rows="2"
+                                      placeholder="Lead paragraph shown above the prompt"></textarea>
+                        </div>
+                        <div class="mb-4">
+                            <label for="lpSearchPlaceholder" class="form-label">Prompt placeholder</label>
+                            <input type="text" class="form-control" id="lpSearchPlaceholder"
+                                   placeholder="Ask about economic, demographic, or government data...">
+                        </div>
+
+                        <h3 class="text-uppercase text-muted small fw-bold mb-3">Below the prompt</h3>
+                        <div class="mb-3">
+                            <label for="lpTryAsking" class="form-label">"Try asking about" heading</label>
+                            <input type="text" class="form-control" id="lpTryAsking"
+                                   placeholder="Try asking about Pittsburgh data...">
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-12 col-md-6">
+                                <label for="lpPoweredByLabel" class="form-label">"Powered by" label</label>
+                                <input type="text" class="form-control" id="lpPoweredByLabel"
+                                       placeholder="WPRDC - City of Pittsburgh">
+                            </div>
+                            <div class="col-12 col-md-6 mt-3 mt-md-0">
+                                <label for="lpPoweredByUrl" class="form-label">"Powered by" link</label>
+                                <input type="text" class="form-control" id="lpPoweredByUrl"
+                                       placeholder="https://data.wprdc.org/...">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="lpSampleQuestions" class="form-label">Sample questions</label>
+                            <textarea class="form-control" id="lpSampleQuestions" rows="6"
+                                      placeholder="One question per line"></textarea>
+                            <div class="form-text">One question per line. These appear as clickable buttons.</div>
+                        </div>
+
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save me-2" aria-hidden="true"></i>Save Landing Page
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- System Prompt Tab -->
+            <div class="tab-pane fade" id="systemprompt" role="tabpanel" aria-labelledby="systemprompt-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-robot" aria-hidden="true"></i>Prompts &amp; Templates</h2>
+                            <p class="pane-sub">
+                                View and edit the instructions sent to the AI for each data-source type,
+                                and the boilerplate markdown written into generated notebooks.
+                                Keep the <code>{placeholders}</code> — the app fills them in per request.
+                                Leave a template blank and save to restore the shipped default.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <span id="spStatus" class="badge bg-secondary align-self-center">Default</span>
+                        </div>
+                    </div>
+
+                    <div id="systemPromptAlert" class="pane-narrow"></div>
+
+                    <div class="mb-3 pane-narrow">
+                        <label for="spTarget" class="form-label">Which prompt</label>
+                        <select class="form-select" id="spTarget">
+                            <option value="ckan">CKAN &amp; open-data portals (WPRDC, default chat)</option>
+                            <option value="mcp">MCP-backed sources (Census, FBI Crime)</option>
+                            <option value="notebook_header">Notebook — title &amp; how-to cell</option>
+                            <option value="notebook_results">Notebook — results &amp; confidence cell</option>
+                            <option value="notebook_review">Notebook review — adversarial reviewer guidelines</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-2">
+                        <label for="spTemplate" class="form-label">Prompt template</label>
+                        <textarea class="form-control system-prompt-editor" id="spTemplate"
+                                  spellcheck="false" autocomplete="off"></textarea>
+                    </div>
+                    <div class="form-text mb-3">
+                        Available placeholders: <span id="spPlaceholders"></span>
+                    </div>
+
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button type="button" class="btn btn-primary" id="spSaveBtn">
+                            <i class="bi bi-save me-2" aria-hidden="true"></i>Save Prompt
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="spResetBtn">
+                            <i class="bi bi-arrow-counterclockwise me-2" aria-hidden="true"></i>Reset to Default
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Query Settings Tab -->
+            <div class="tab-pane fade" id="runtime" role="tabpanel" aria-labelledby="runtime-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-stopwatch" aria-hidden="true"></i>Query Settings</h2>
+                            <p class="pane-sub">
+                                Controls for how long a single analysis may run. When the limit is
+                                reached the user gets a friendly answer with suggested alternative
+                                questions instead of a generic error.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <span id="rtStatus" class="badge bg-secondary align-self-center">Default</span>
+                        </div>
+                    </div>
+
+                    <div id="runtimeAlert" class="pane-narrow"></div>
+
+                    <div class="mb-3 pane-narrow">
+                        <label for="rtQueryTimeout" class="form-label">Analysis timeout (seconds)</label>
+                        <input type="number" class="form-control" id="rtQueryTimeout"
+                               min="30" max="3600" step="10" inputmode="numeric">
+                        <div class="form-text" id="rtTimeoutHelp">
+                            Applies to new queries immediately — no restart needed. Keep this below your
+                            hosting platform's request timeout (Cloud Run defaults to 300&nbsp;s) so the
+                            app can respond gracefully before the connection is cut.
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button type="button" class="btn btn-primary" id="rtSaveBtn">
+                            <i class="bi bi-save me-2" aria-hidden="true"></i>Save Settings
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="rtResetBtn">
+                            <i class="bi bi-arrow-counterclockwise me-2" aria-hidden="true"></i>Reset to Default
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GitHub Publishing Tab -->
+            <div class="tab-pane fade" id="settings" role="tabpanel" aria-labelledby="settings-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-github" aria-hidden="true"></i>GitHub Notebook Publishing</h2>
+                            <p class="pane-sub">
+                                Automatically push notebooks to a GitHub repository. Drafts go to one
+                                folder, verified notebooks to another.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div id="githubSettingsAlert"></div>
+
+                    <div class="card mb-4 pane-narrow">
+                        <div class="card-body d-flex align-items-center gap-3 flex-wrap">
+                            <div>
+                                <div class="text-muted small">Status</div>
+                                <span id="ghStatusBadge" class="badge bg-secondary">Loading…</span>
+                            </div>
+                            <div class="flex-grow-1 small text-muted" id="ghStatusHint" style="min-width: 220px;">
+                                Publishing is active whenever repo + token are configured.
+                                Use Pause to halt all GitHub I/O without erasing the token.
+                            </div>
+                            <button type="button" class="btn btn-outline-warning flex-shrink-0" id="ghPauseBtn" disabled>
+                                <i class="bi bi-pause-circle me-1" aria-hidden="true"></i><span id="ghPauseBtnLabel">Pause</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <form id="githubSettingsForm" class="pane-narrow">
+                        <div class="mb-3">
+                            <label for="ghToken" class="form-label">GitHub Personal Access Token</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="ghToken"
+                                       placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+                                <button class="btn btn-outline-secondary" type="button" id="ghTokenToggle"
+                                        aria-label="Show token" aria-pressed="false">
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div class="form-text" id="ghTokenHint">Leave blank to keep the existing token.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="ghWebhookSecret" class="form-label">Webhook Secret</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="ghWebhookSecret"
+                                       placeholder="Shared secret for inbound GitHub webhooks">
+                                <button class="btn btn-outline-secondary" type="button" id="ghWebhookSecretToggle"
+                                        aria-label="Show webhook secret" aria-pressed="false">
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div class="form-text" id="ghWebhookSecretHint">
+                                Used to verify <code>X-Hub-Signature-256</code> on inbound webhook deliveries.
+                                Leave blank to keep the existing secret.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="ghRepo" class="form-label">Repository</label>
+                            <input type="text" class="form-control" id="ghRepo"
+                                   placeholder="owner/repo-name">
+                            <div class="form-text">e.g. dathere/data-concierge-notebooks</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="ghBranch" class="form-label">Branch</label>
+                            <input type="text" class="form-control" id="ghBranch" placeholder="main">
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-12 col-md-4">
+                                <label for="ghDraftsFolder" class="form-label">Drafts Folder</label>
+                                <input type="text" class="form-control" id="ghDraftsFolder" placeholder="drafts">
+                            </div>
+                            <div class="col-12 col-md-4 mt-3 mt-md-0">
+                                <label for="ghVerifiedFolder" class="form-label">Verified Folder</label>
+                                <input type="text" class="form-control" id="ghVerifiedFolder" placeholder="verified">
+                            </div>
+                            <div class="col-12 col-md-4 mt-3 mt-md-0">
+                                <label for="ghVerifiedAnswersFolder" class="form-label">Verified Answers Folder</label>
+                                <input type="text" class="form-control" id="ghVerifiedAnswersFolder" placeholder="verified-answers">
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save me-2" aria-hidden="true"></i>Save Settings
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="ghTestBtn">
+                                <i class="bi bi-plug me-2" aria-hidden="true"></i>Test Connection
+                            </button>
+                        </div>
+                    </form>
+
+                    <div id="ghTestResult" class="mt-3 pane-narrow"></div>
+                </div>
+            </div>
+            </div><!-- /.tab-content -->
+            </div><!-- /.admin-main -->
+        </div><!-- /.admin-layout -->
+    </div>
+
+    <footer class="site-footer">
+        <div class="site-footer-inner">
+            <div class="footer-brand">
+                <a href="https://dathere.com" target="_blank" rel="noopener"
+                   class="d-inline-flex align-items-center" aria-label="datHere home">
+                    <img src="/static/images/logo-light.svg" alt="datHere" class="dc-logo footer-logo">
+                </a>
+                <p class="footer-tagline">Verikan is built by datHere — data wrangling, redefined.</p>
+            </div>
+            <nav class="footer-links" aria-label="datHere">
+                <div class="footer-col">
+                    <span class="footer-col-title">Verikan</span>
+                    <a href="/library">Verified Library</a>
+                    <a href="/docs">User Guide</a>
+                    <a href="https://dathere.com/contact/" target="_blank" rel="noopener">Contact <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
+                </div>
+            </nav>
+        </div>
+        <div class="site-footer-bottom">
+            <span>© 2026 datHere. All rights reserved.</span>
+            <span>The verified Data Concierge</span>
+        </div>
+    </footer>
+
+    <!-- Review Modal -->
+    <div class="modal fade" id="reviewModal" tabindex="-1" aria-labelledby="reviewModalTitle">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reviewModalTitle">Review Submission</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Query</label>
+                        <p id="reviewQuery" class="mb-0"></p>
+                        <a id="reviewGithubLink" class="small d-none" target="_blank" rel="noopener">
+                            <i class="bi bi-github me-1" aria-hidden="true"></i>View published artifact on GitHub
+                            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                        </a>
+                    </div>
+
+                    <!-- Tabs -->
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabAnswer" type="button">
+                                <i class="bi bi-chat-text me-1" aria-hidden="true"></i>Answer &amp; Notebook
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabLogs" type="button">
+                                <i class="bi bi-terminal me-1" aria-hidden="true"></i>Agent Logs
+                                <span id="logBadge" class="badge bg-secondary ms-1 d-none">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabMethodReview" type="button">
+                                <i class="bi bi-clipboard2-check me-1" aria-hidden="true"></i>Method Review
+                                <span id="reviewFindingsBadge" class="badge bg-secondary ms-1 d-none">0</span>
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <!-- Answer & Notebook Tab -->
+                        <div class="tab-pane fade show active" id="tabAnswer" role="tabpanel">
+                            <div class="mb-3">
+                                <label class="form-label text-muted small">Answer Preview</label>
+                                <div id="reviewAnswer" class="rounded p-3" style="max-height: 40vh; overflow-y: auto; background-color: var(--dc-code-bg);"></div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="form-label text-muted small mb-0">Notebook</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <span id="reviewNotebookInfo" class="text-muted small"></span>
+                                        <a id="reviewDownloadBtn" class="btn btn-sm btn-outline-primary" download>
+                                            <i class="bi bi-download me-1" aria-hidden="true"></i>Download
+                                        </a>
+                                    </div>
+                                </div>
+                                <div id="reviewNotebookCells" class="border rounded" style="max-height: 50vh; overflow-y: auto;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Agent Logs Tab -->
+                        <div class="tab-pane fade" id="tabLogs" role="tabpanel">
+                            <div id="agentLogsContainer" style="max-height: 60vh; overflow-y: auto;">
+                                <p class="text-muted p-3">Loading logs...</p>
+                            </div>
+                        </div>
+
+                        <!-- Method Review Tab (execution + adversarial review, #131) -->
+                        <div class="tab-pane fade" id="tabMethodReview" role="tabpanel">
+                            <div id="methodReviewContainer" style="max-height: 60vh; overflow-y: auto;">
+                                <p class="text-muted p-3">Loading review…</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 mt-3">
+                        <label for="adminNotes" class="form-label">
+                            Reason <span class="text-danger" aria-hidden="true">*</span>
+                        </label>
+                        <textarea class="form-control" id="adminNotes" rows="2" required
+                                  placeholder="Why are you approving or rejecting this? (recorded in the GitHub commit)"></textarea>
+                        <div class="invalid-feedback">A reason is required to approve or reject.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="rejectBtn">
+                        <i class="bi bi-x-circle me-2" aria-hidden="true"></i>Reject
+                    </button>
+                    <button type="button" class="btn btn-success" id="approveBtn">
+                        <i class="bi bi-check-circle me-2" aria-hidden="true"></i>Approve
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Verified Notebook Modal (read-only, #72/#71/#73) -->
+    <div class="modal fade" id="viewModal" tabindex="-1" aria-labelledby="viewModalTitle">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewModalTitle"><i class="bi bi-eye me-2" aria-hidden="true"></i>Verified Notebook</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Query</label>
+                        <p id="viewQuery" class="mb-1"></p>
+                        <div id="viewMeta" class="text-muted small"></div>
+                        <div id="viewAdminNotes" class="text-muted small mt-1 d-none"></div>
+                        <a id="viewGithubLink" class="small d-none mt-1 d-inline-block" target="_blank" rel="noopener">
+                            <i class="bi bi-github me-1" aria-hidden="true"></i>View published artifact on GitHub
+                            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                        </a>
+                        <div class="mt-2">
+                            <a id="viewVerifyLink" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener"
+                               title="Independently verify this evidence at typedstandards.org — checks run in your browser">
+                                <i class="bi bi-patch-check-fill me-1" aria-hidden="true"></i>Typed Standards verified
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Tabs -->
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabViewNotebook" type="button">
+                                <i class="bi bi-journal-code me-1" aria-hidden="true"></i>Notebook
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabViewLogs" type="button">
+                                <i class="bi bi-terminal me-1" aria-hidden="true"></i>Agent Logs
+                                <span id="viewLogBadge" class="badge bg-secondary ms-1 d-none">0</span>
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <!-- Notebook Tab -->
+                        <div class="tab-pane fade show active" id="tabViewNotebook" role="tabpanel">
+                            <div class="d-flex justify-content-end mb-2">
+                                <span id="viewNotebookInfo" class="text-muted small"></span>
+                            </div>
+                            <div id="viewNotebookCells" class="border rounded" style="max-height: 60vh; overflow-y: auto;"></div>
+                        </div>
+
+                        <!-- Agent Logs Tab -->
+                        <div class="tab-pane fade" id="tabViewLogs" role="tabpanel">
+                            <div id="viewAgentLogsContainer" style="max-height: 60vh; overflow-y: auto;">
+                                <p class="text-muted p-3">Loading logs...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add MCP Server Modal -->
+    <div class="modal fade" id="addMcpServerModal" tabindex="-1" aria-labelledby="addMcpServerModalTitle">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addMcpServerModalTitle"><i class="bi bi-plus-circle me-2" aria-hidden="true"></i>Add MCP Server</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addMcpServerForm">
+                        <div class="mb-3">
+                            <label class="form-label" for="mcpServerName">
+                                Server Name <span class="text-danger" aria-hidden="true">*</span>
+                            </label>
+                            <input type="text" class="form-control" id="mcpServerName" required
+                                   placeholder="e.g., Census Bureau MCP">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="mcpServerDescription">Description</label>
+                            <textarea class="form-control" id="mcpServerDescription" rows="2"
+                                      placeholder="What data does this server provide?"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label d-block">Transport Type</label>
+                            <div class="btn-group w-100" role="group" aria-label="Transport type">
+                                <input type="radio" class="btn-check" name="mcpTransport" id="mcpTransportStdio" value="stdio" checked>
+                                <label class="btn btn-outline-primary" for="mcpTransportStdio">
+                                    <i class="bi bi-terminal me-1" aria-hidden="true"></i>stdio (Process)
+                                </label>
+                                <input type="radio" class="btn-check" name="mcpTransport" id="mcpTransportSse" value="sse">
+                                <label class="btn btn-outline-primary" for="mcpTransportSse">
+                                    <i class="bi bi-broadcast me-1" aria-hidden="true"></i>SSE
+                                </label>
+                                <input type="radio" class="btn-check" name="mcpTransport" id="mcpTransportHttp" value="streamable_http">
+                                <label class="btn btn-outline-primary" for="mcpTransportHttp">
+                                    <i class="bi bi-globe me-1" aria-hidden="true"></i>Streamable HTTP
+                                </label>
+                            </div>
+                        </div>
+                        <!-- stdio fields -->
+                        <div id="mcpStdioFields">
+                            <div class="mb-3">
+                                <label class="form-label" for="mcpServerCommand">
+                                    Command <span class="text-danger" aria-hidden="true">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="mcpServerCommand"
+                                       placeholder="e.g., docker, npx, node">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="mcpServerArgs">Arguments (one per line)</label>
+                                <textarea class="form-control" id="mcpServerArgs" rows="3"
+                                          placeholder="compose&#10;run&#10;--rm&#10;census-mcp"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="mcpServerEnv">Environment Variables (KEY=VALUE, one per line)</label>
+                                <textarea class="form-control" id="mcpServerEnv" rows="2"
+                                          placeholder="API_KEY=your-key&#10;PORT=3000"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="mcpServerWorkingDir">Working Directory</label>
+                                <input type="text" class="form-control" id="mcpServerWorkingDir"
+                                       placeholder="/path/to/mcp-server-project">
+                                <div class="form-text">Directory where the command will run (required for Docker-based servers).</div>
+                            </div>
+                        </div>
+                        <!-- URL fields (SSE / streamable HTTP) -->
+                        <div id="mcpSseFields" class="d-none">
+                            <div class="mb-3">
+                                <label class="form-label" for="mcpServerUrl">
+                                    Server URL <span class="text-danger" aria-hidden="true">*</span>
+                                </label>
+                                <input type="url" class="form-control" id="mcpServerUrl"
+                                       placeholder="http://localhost:3000/mcp">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="mcpServerCategories">Categories (comma-separated)</label>
+                            <input type="text" class="form-control" id="mcpServerCategories"
+                                   placeholder="demographics, population, census">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="mcpServerKeywords">Keywords (comma-separated)</label>
+                            <input type="text" class="form-control" id="mcpServerKeywords"
+                                   placeholder="census, population, fips, geography">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="mcpServerAutoConnect">
+                            <label class="form-check-label" for="mcpServerAutoConnect">Auto-connect on startup</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="mcpAddServerBtn">
+                        <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>Add Server
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MCP Tool Call Modal -->
+    <div class="modal fade" id="mcpToolCallModal" tabindex="-1" aria-labelledby="mcpToolCallTitle">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="mcpToolCallTitle">Call Tool</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="mcpToolCallArgs">Arguments (JSON)</label>
+                        <textarea class="form-control font-monospace" id="mcpToolCallArgs" rows="6"
+                                  placeholder='{"param": "value"}'>{}</textarea>
+                    </div>
+                    <div id="mcpToolCallResult" class="d-none">
+                        <label class="form-label">Result</label>
+                        <pre class="rounded-code-block p-3 rounded" style="max-height: 300px; overflow: auto;"><code id="mcpToolCallResultText"></code></pre>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="mcpExecuteToolBtn">
+                        <i class="bi bi-play me-2" aria-hidden="true"></i>Execute
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add CKAN Site Modal -->
+    <div class="modal fade" id="addCkanSiteModal" tabindex="-1" aria-labelledby="addCkanSiteModalTitle">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addCkanSiteModalTitle"><i class="bi bi-globe me-2" aria-hidden="true"></i>Add CKAN Site</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addCkanSiteForm">
+                        <div class="mb-3">
+                            <label class="form-label" for="ckanSiteName">
+                                Portal Name <span class="text-danger" aria-hidden="true">*</span>
+                            </label>
+                            <input type="text" class="form-control" id="ckanSiteName" required
+                                   placeholder="e.g., NYC Open Data">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="ckanSiteUrl">
+                                CKAN Portal URL <span class="text-danger" aria-hidden="true">*</span>
+                            </label>
+                            <input type="url" class="form-control" id="ckanSiteUrl" required
+                                   placeholder="https://data.cityofnewyork.us">
+                            <div class="form-text">The base URL of the CKAN instance (without <code>/api/3</code>).</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="ckanSiteId">Site ID</label>
+                            <input type="text" class="form-control" id="ckanSiteId"
+                                   placeholder="Auto-generated from name if blank">
+                            <div class="form-text">Stable, lowercase identifier used internally (e.g., <code>nyc-open-data</code>).</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="ckanSiteOrg">Default Organization</label>
+                            <input type="text" class="form-control" id="ckanSiteOrg"
+                                   placeholder="e.g., city-of-pittsburgh (optional)">
+                            <div class="form-text">CKAN organization slug used as a default filter when the agent searches this portal.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="ckanSiteDescription">Description</label>
+                            <textarea class="form-control" id="ckanSiteDescription" rows="2"
+                                      placeholder="What datasets does this portal host?"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="ckanSiteKeywords">Keywords (comma-separated)</label>
+                            <input type="text" class="form-control" id="ckanSiteKeywords"
+                                   placeholder="nyc, new york, crime, housing">
+                            <div class="form-text">Help the concierge pick this site when a user&rsquo;s question mentions these topics.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="ckanSiteQuality">Quality Score: <span id="ckanSiteQualityValue">0.85</span></label>
+                            <input type="range" class="form-range" id="ckanSiteQuality"
+                                   min="0" max="1" step="0.05" value="0.85">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="ckanAddSiteBtn">
+                        <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>Add Site
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pause/Resume confirmation modal -->
+    <div class="modal fade" id="ghPauseModal" tabindex="-1" aria-labelledby="ghPauseModalTitle">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="ghPauseModalTitle">Pause GitHub publishing?</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="ghPauseModalBody" class="mb-0"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" id="ghPauseConfirmBtn">
+                        <i class="bi bi-pause-circle me-1" aria-hidden="true"></i><span id="ghPauseConfirmLabel">Pause publishing</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <i class="bi bi-info-circle me-2 text-primary" aria-hidden="true"></i>
+                <strong class="me-auto">Notice</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="toastBody"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/python.min.js"></script>
+    <script src="/static/js/admin.js?v=20260819-reviews3"></script>
+    <script src="/static/js/theme.js?v=20260713-redesign"></script>
+</body>
+</html>

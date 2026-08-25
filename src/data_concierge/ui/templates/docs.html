@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verikan · User Guide</title>
+    <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg?v=20260713-redesign">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650;700;750&display=swap" rel="stylesheet">
+    <link href="/static/css/style.css?v=20260713-redesign" rel="stylesheet">
+    <style>
+        /* Page layout only — shared components (callouts, steps, feature cards,
+           kbd) live in the design system (style.css §17c). */
+        html { scroll-behavior: smooth; }
+        .docs-sidebar {
+            position: fixed;
+            top: var(--dc-navbar-h);
+            left: 0;
+            bottom: 0;
+            width: 260px;
+            background-color: var(--dc-bg-alt);
+            border-right: 1px solid var(--dc-border);
+            overflow-y: auto;
+            z-index: 1040;
+            padding: 1.5rem 1rem;
+            transition: transform var(--dc-dur) var(--dc-ease);
+        }
+        /* Center the reading column in the space right of the sidebar */
+        .docs-main { margin-left: 260px; margin-top: var(--dc-navbar-h); }
+        .docs-inner { max-width: 860px; margin: 0 auto; padding: 2.5rem 3rem 4rem; }
+        .docs-header { margin-bottom: 2.25rem; }
+        .docs-header h1 { font-size: 1.9rem; font-weight: 750; margin-bottom: 0.35rem; }
+        .docs-header p { color: var(--dc-text-muted); margin: 0; }
+        .docs-nav-link {
+            display: block;
+            padding: 0.4rem 0.75rem;
+            color: var(--dc-text-muted);
+            text-decoration: none;
+            border-radius: var(--dc-radius-sm);
+            font-size: 0.875rem;
+            transition: color var(--dc-dur) var(--dc-ease), background-color var(--dc-dur) var(--dc-ease);
+        }
+        .docs-nav-link:hover { color: var(--dc-text); background: var(--dc-surface-hover); }
+        .docs-nav-link.active { color: var(--dc-primary); background: var(--dc-primary-soft); font-weight: 550; }
+        .docs-nav-section {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--dc-text-muted);
+            padding: 1.25rem 0.75rem 0.4rem;
+        }
+        .section-anchor { scroll-margin-top: 80px; }
+        .docs-main h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--dc-border);
+            margin-top: 3rem;
+            margin-bottom: 1.25rem;
+        }
+        .docs-main h2:first-of-type { margin-top: 0; }
+        .docs-main h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+            color: var(--dc-text);
+        }
+        .docs-main p, .docs-main li { color: var(--dc-text-secondary); line-height: 1.7; }
+        /* Inline code — matches the app's code treatment (Bootstrap's pink default clashes) */
+        .docs-main code {
+            background: var(--dc-code-bg);
+            border: 1px solid var(--dc-border);
+            border-radius: 5px;
+            padding: 0.1rem 0.35rem;
+            font-size: 0.85em;
+            color: var(--dc-text);
+        }
+        /* TOC drawer toggle — visible only when the sidebar is off-canvas */
+        #docsTocBtn { display: none; }
+        #docsTocBackdrop {
+            position: fixed;
+            inset: var(--dc-navbar-h) 0 0 0;
+            background: rgba(15, 23, 42, 0.45);
+            z-index: 1035;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity var(--dc-dur) var(--dc-ease), visibility var(--dc-dur);
+        }
+        @media (max-width: 1100px) {
+            .docs-inner { padding: 2rem 1.75rem 3rem; }
+        }
+        @media (max-width: 991.98px) {
+            .docs-sidebar {
+                transform: translateX(-100%);
+                width: min(86vw, 300px);
+                box-shadow: var(--dc-shadow-lg);
+            }
+            body.toc-open .docs-sidebar { transform: none; }
+            body.toc-open #docsTocBackdrop { opacity: 1; visibility: visible; }
+            .docs-main { margin-left: 0; }
+            #docsTocBtn { display: inline-flex; }
+        }
+        @media (max-width: 768px) {
+            .docs-inner { padding: 1.5rem 1.25rem 3rem; }
+        }
+    </style>
+    <script>
+        (function() {
+            var s = localStorage.getItem('dc-theme') || 'light';
+            document.documentElement.setAttribute('data-bs-theme', s);
+        })();
+    </script>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar fixed-top" aria-label="Main">
+        <div class="container-fluid px-0">
+            <div class="d-flex align-items-center gap-2" style="min-width: 0;">
+                <button id="docsTocBtn" class="icon-btn" type="button"
+                        aria-label="Toggle table of contents" aria-expanded="false">
+                    <i class="bi bi-list" aria-hidden="true"></i>
+                </button>
+                <a class="navbar-brand d-flex align-items-center mb-0" href="/">
+                    <img src="/static/images/logo-light.svg" alt="Verikan" class="dc-logo">
+                    <span class="brand-lockup">
+                        <span class="brand-name">Verikan</span>
+                        <span class="brand-sub">Data Concierge</span>
+                    </span>
+                    <span class="dc-tag">Guide</span>
+                </a>
+            </div>
+            <div class="nav-cluster">
+                <button class="theme-toggle" id="themeToggle" type="button"
+                        aria-label="Toggle light or dark mode" title="Toggle light/dark mode"
+                        onclick="toggleTheme()">
+                    <i class="bi bi-moon-stars" aria-hidden="true"></i>
+                </button>
+                <!-- Revealed only for signed-in admins by the inline script below.
+                     The /admin route is backend-protected regardless. -->
+                <a href="/admin" id="docsAdminLink" class="btn btn-outline-secondary btn-sm d-none"
+                   title="Open the admin dashboard">
+                    <i class="bi bi-speedometer2 me-1" aria-hidden="true"></i><span class="btn-label">Admin</span>
+                </a>
+                <a href="/" class="btn btn-primary btn-sm" title="Back to Chat">
+                    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i><span class="btn-label">Back to Chat</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar Navigation -->
+    <nav class="docs-sidebar" aria-label="On this page">
+        <div class="docs-nav-section">Getting Started</div>
+        <a class="docs-nav-link active" href="#what-is" aria-current="true">What is Verikan?</a>
+        <a class="docs-nav-link" href="#signing-up">Signing In</a>
+        <a class="docs-nav-link" href="#guest-access">Guest Access</a>
+
+        <div class="docs-nav-section">Using the Chat</div>
+        <a class="docs-nav-link" href="#asking-questions">Asking Questions</a>
+        <a class="docs-nav-link" href="#example-questions">Example Questions</a>
+        <a class="docs-nav-link" href="#data-sources">Data Sources</a>
+        <a class="docs-nav-link" href="#verified-answers">Verified Answers</a>
+        <a class="docs-nav-link" href="#conversations">Managing Conversations</a>
+
+        <div class="docs-nav-section">Notebooks</div>
+        <a class="docs-nav-link" href="#what-is-notebook">What is a Notebook?</a>
+        <a class="docs-nav-link" href="#viewing-notebook">Viewing &amp; Downloading</a>
+        <a class="docs-nav-link" href="#submitting-notebook">Submitting for Review</a>
+        <a class="docs-nav-link" href="#running-notebook">Running in Jupyter / Colab</a>
+
+        <div class="docs-nav-section">Admin Panel</div>
+        <a class="docs-nav-link" href="#admin-overview">Overview</a>
+        <a class="docs-nav-link" href="#admin-review">Reviewing Submissions</a>
+        <a class="docs-nav-link" href="#admin-members">Approved Members</a>
+        <a class="docs-nav-link" href="#admin-ckan">CKAN Sites</a>
+        <a class="docs-nav-link" href="#admin-mcp">MCP Servers</a>
+        <a class="docs-nav-link" href="#admin-logs">Query Logs</a>
+        <a class="docs-nav-link" href="#admin-github">GitHub Publishing</a>
+        <a class="docs-nav-link" href="#github-notebooks">Notebooks on GitHub</a>
+
+        <div class="docs-nav-section">Reference</div>
+        <a class="docs-nav-link" href="#tips">Tips &amp; Tricks</a>
+        <a class="docs-nav-link" href="#faq">FAQ</a>
+    </nav>
+    <div id="docsTocBackdrop" aria-hidden="true"></div>
+
+    <!-- Main Content -->
+    <main class="docs-main">
+    <div class="docs-inner">
+
+        <header class="docs-header">
+            <h1>Verikan User Guide</h1>
+            <p>Everything you need to ask questions, read verified answers, and administer the concierge.</p>
+        </header>
+
+        <!-- ─── What is Verikan ─── -->
+        <h2 class="section-anchor" id="what-is">
+            <i class="bi bi-robot me-2 text-primary" aria-hidden="true"></i>What is Verikan?
+        </h2>
+        <p>
+            <strong>Verikan</strong> — your AI <strong>Data Concierge</strong> — is a chat assistant that
+            lets you explore government and public open-data sources using plain English, with every
+            answer backed by citations and independent verification. Instead of downloading
+            CSV files and writing code yourself, you just ask a question and the system:
+        </p>
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <div class="feature-card d-flex gap-3">
+                    <div class="feature-icon feature-icon-primary"><i class="bi bi-search" aria-hidden="true"></i></div>
+                    <div><strong>Finds the data</strong><br><span class="text-muted small">Searches registered CKAN portals and connected data sources automatically.</span></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="feature-card d-flex gap-3">
+                    <div class="feature-icon feature-icon-success"><i class="bi bi-bar-chart-line" aria-hidden="true"></i></div>
+                    <div><strong>Analyzes it</strong><br><span class="text-muted small">Runs real Python code against the live dataset to compute counts, trends and summaries.</span></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="feature-card d-flex gap-3">
+                    <div class="feature-icon feature-icon-warning"><i class="bi bi-chat-quote" aria-hidden="true"></i></div>
+                    <div><strong>Explains the result</strong><br><span class="text-muted small">Returns a clear, cited, Markdown-formatted answer with key takeaways.</span></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="feature-card d-flex gap-3">
+                    <div class="feature-icon feature-icon-info"><i class="bi bi-journal-code" aria-hidden="true"></i></div>
+                    <div><strong>Gives you the code</strong><br><span class="text-muted small">Every answer comes with a downloadable Jupyter notebook you can run and modify.</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── Signing In ─── -->
+        <h2 class="section-anchor" id="signing-up">
+            <i class="bi bi-person-plus me-2 text-primary" aria-hidden="true"></i>Signing In
+        </h2>
+        <p>
+            A login is required to run <em>new</em> queries. Verified community notebooks can be
+            browsed and downloaded without any account. Verikan uses social sign-in with
+            <strong>GitHub</strong> or <strong>LinkedIn</strong>.
+        </p>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">Click the <strong>Login</strong> button in the top-right corner of any page, then <strong>Sign in with GitHub</strong> or <strong>Sign in with LinkedIn</strong>.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">If your email is not yet on the approved list you will land on an <em>"Awaiting Verification"</em> page. An admin is notified automatically and reviews the request.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Once approved, sign in again and you'll proceed straight to the chat. Your username appears in the navbar.</div></li>
+        </ol>
+
+        <div class="callout callout-tip">
+            <i class="bi bi-lightbulb me-2 text-success" aria-hidden="true"></i>
+            Your conversations are saved to your account and sync across browsers once you're logged in.
+        </div>
+
+        <!-- ─── Guest Access ─── -->
+        <h2 class="section-anchor" id="guest-access">
+            <i class="bi bi-eye me-2 text-primary" aria-hidden="true"></i>Guest Access
+        </h2>
+        <p>Without logging in you can still:</p>
+        <ul>
+            <li>Browse the landing page and example questions.</li>
+            <li>View and download any <span class="badge bg-success">Verified</span> notebook from the community library.</li>
+            <li>See answers that match a verified notebook (the system will serve the cached answer automatically).</li>
+        </ul>
+        <p>To submit your own queries and generate new analysis you must be logged in.</p>
+
+        <!-- ─── Asking Questions ─── -->
+        <h2 class="section-anchor" id="asking-questions">
+            <i class="bi bi-chat-dots me-2 text-primary" aria-hidden="true"></i>Asking Questions
+        </h2>
+        <p>
+            Type your question in natural language into the search bar on the landing page or the
+            message box at the bottom of any open chat. Press <kbd>Enter</kbd> or click the
+            <i class="bi bi-send" aria-hidden="true"></i> button to submit.
+        </p>
+        <p>The system works best when questions are:</p>
+        <ul>
+            <li><strong>Specific about geography</strong> — mention the city, neighborhood, or county you care about.</li>
+            <li><strong>Focused on a single metric</strong> — "How many potholes were reported in Squirrel Hill last year?" works better than "Tell me everything about Pittsburgh infrastructure."</li>
+            <li><strong>Time-aware</strong> — include a year or date range where relevant ("in 2024", "last 6 months").</li>
+        </ul>
+        <div class="callout callout-tip">
+            <i class="bi bi-lightbulb me-2 text-success" aria-hidden="true"></i>
+            If the assistant returns a <span class="badge bg-success"><i class="bi bi-patch-check-fill me-1"></i>Verified Answer</span>
+            it means a community-reviewed notebook already answered this question — the result is
+            instant and 100% reproducible.
+        </div>
+
+        <!-- ─── Example Questions ─── -->
+        <h2 class="section-anchor" id="example-questions">
+            <i class="bi bi-card-list me-2 text-primary" aria-hidden="true"></i>Example Questions
+        </h2>
+        <p>Here are the kinds of questions Verikan handles well:</p>
+
+        <h3><i class="bi bi-telephone me-2 text-warning" aria-hidden="true"></i>311 Service Requests</h3>
+        <ul>
+            <li>What are the most common types of 311 requests in Pittsburgh?</li>
+            <li>Which neighborhoods generate the most 311 complaints?</li>
+            <li>How long does it take the city to resolve pothole reports?</li>
+            <li>Show me 311 request trends over the past three years.</li>
+        </ul>
+
+        <h3><i class="bi bi-shield-check me-2 text-danger" aria-hidden="true"></i>Public Safety</h3>
+        <ul>
+            <li>Which Pittsburgh neighborhoods have the most police incidents?</li>
+            <li>What types of crime are most common in the Hill District?</li>
+            <li>Show me year-over-year changes in reported incidents by type.</li>
+        </ul>
+
+        <h3><i class="bi bi-building me-2 text-info" aria-hidden="true"></i>Building &amp; Property</h3>
+        <ul>
+            <li>How many building permits were issued in Pittsburgh last year?</li>
+            <li>What is the distribution of property values across Pittsburgh neighborhoods?</li>
+            <li>Which ZIP codes have the highest number of vacant properties?</li>
+        </ul>
+
+        <h3><i class="bi bi-people me-2 text-success" aria-hidden="true"></i>Community &amp; Demographics</h3>
+        <ul>
+            <li>Show me community center attendance trends in Pittsburgh.</li>
+            <li>What is the population breakdown by age group in Allegheny County?</li>
+            <li>What is the median household income by neighborhood?</li>
+        </ul>
+
+        <!-- ─── Data Sources ─── -->
+        <h2 class="section-anchor" id="data-sources">
+            <i class="bi bi-database me-2 text-primary" aria-hidden="true"></i>Data Sources
+        </h2>
+        <p>Verikan currently queries the following data sources:</p>
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Type</th>
+                        <th>Coverage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><a href="https://data.wprdc.org" target="_blank" rel="noopener">WPRDC</a> — Western PA Regional Data Center</td>
+                        <td><span class="badge bg-secondary">CKAN</span></td>
+                        <td>Pittsburgh &amp; Allegheny County — 311 requests, crime, permits, property assessments, community centers, traffic, and more (126+ datasets)</td>
+                    </tr>
+                    <tr>
+                        <td>datHere CKAN Portal</td>
+                        <td><span class="badge bg-secondary">CKAN</span></td>
+                        <td>General open data portal with diverse datasets</td>
+                    </tr>
+                    <tr>
+                        <td>U.S. Census Bureau MCP</td>
+                        <td><span class="badge bg-primary">MCP</span></td>
+                        <td>National &amp; state-level population, income, housing, demographics (ACS)</td>
+                    </tr>
+                    <tr>
+                        <td>FBI Crime Data Explorer MCP</td>
+                        <td><span class="badge bg-primary">MCP</span></td>
+                        <td>National crime statistics (UCR/NIBRS) — incidents, arrests, trends, police employment</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p>Admins can register additional CKAN portals from the Admin Panel — see the
+        <a href="#admin-ckan">CKAN Sites</a> section below.</p>
+
+        <!-- ─── Verified Answers ─── -->
+        <h2 class="section-anchor" id="verified-answers">
+            <i class="bi bi-patch-check me-2 text-primary" aria-hidden="true"></i>Verified Answers
+        </h2>
+        <p>
+            When an admin approves a notebook submission it enters the <strong>Verified Library</strong>.
+            Future questions that closely match a verified entry (≥ 50% semantic similarity) receive
+            the pre-reviewed answer instantly — no new computation needed.
+        </p>
+        <div class="callout callout-info">
+            <i class="bi bi-info-circle me-2 text-info" aria-hidden="true"></i>
+            A <span class="badge bg-success"><i class="bi bi-patch-check-fill me-1"></i>Verified Answer</span>
+            badge means the answer was produced by a human-reviewed notebook and is considered
+            authoritative. A <span class="badge bg-secondary">Generated</span> response is freshly
+            computed by the AI and may contain errors — always check the underlying notebook.
+        </div>
+        <p>
+            If a verified notebook scores between 40–49% similarity, the system shows a
+            <strong>Similar Verified Notebook</strong> banner beneath the generated answer so you
+            can quickly download the related community notebook.
+        </p>
+
+        <!-- ─── Conversations ─── -->
+        <h2 class="section-anchor" id="conversations">
+            <i class="bi bi-chat-left-text me-2 text-primary" aria-hidden="true"></i>Managing Conversations
+        </h2>
+        <ul>
+            <li><strong>New Chat</strong> — click the blue <em>New Chat</em> button in the sidebar to start a fresh conversation.</li>
+            <li><strong>Switching chats</strong> — click any conversation in the left sidebar to jump back to it; all messages are restored.</li>
+            <li><strong>Searching</strong> — the sidebar search box filters conversations by title and message text.</li>
+            <li><strong>Renaming</strong> — click the <i class="bi bi-pencil" aria-hidden="true"></i> pencil icon in the chat header (or double-click the title).</li>
+            <li><strong>Deleting a chat</strong> — click the <i class="bi bi-trash3" aria-hidden="true"></i> icon on any sidebar item; you'll be asked to confirm.</li>
+            <li><strong>Persistent URLs</strong> — each conversation gets a unique URL (e.g. <code>/#a3f9b2c1</code>). Bookmark it or share the link to return directly to that chat.</li>
+            <li><strong>Cross-device sync</strong> — when logged in your chats are saved to the server and load automatically on any browser.</li>
+        </ul>
+
+        <!-- ─── What is a Notebook ─── -->
+        <h2 class="section-anchor" id="what-is-notebook">
+            <i class="bi bi-journal-code me-2 text-primary" aria-hidden="true"></i>What is a Notebook?
+        </h2>
+        <p>
+            Every answer generated by the AI is accompanied by a <strong>Jupyter Notebook</strong>
+            (<code>.ipynb</code>) — a self-contained document that records exactly how the data was
+            fetched, cleaned, and analyzed. Notebooks consist of two cell types:
+        </p>
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <div class="feature-card">
+                    <span class="badge cell-type-badge cell-type-code mb-2">Code cell</span>
+                    <p class="mb-0 small text-muted">Executable Python — imports libraries, calls the CKAN API, computes statistics, creates charts.</p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="feature-card">
+                    <span class="badge cell-type-badge cell-type-markdown mb-2">Markdown cell</span>
+                    <p class="mb-0 small text-muted">Human-readable explanation — describes what the code does and interprets results.</p>
+                </div>
+            </div>
+        </div>
+        <p>
+            Notebooks make analysis fully <strong>reproducible</strong>: anyone can download the
+            file, run it in Jupyter or Google Colab, and arrive at the same numbers.
+        </p>
+
+        <!-- ─── Viewing & Downloading ─── -->
+        <h2 class="section-anchor" id="viewing-notebook">
+            <i class="bi bi-eye me-2 text-primary" aria-hidden="true"></i>Viewing &amp; Downloading
+        </h2>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">After the assistant responds, click the <strong><i class="bi bi-journal-code me-1" aria-hidden="true"></i>View Notebook</strong> button that appears under the message.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">A full-screen viewer opens showing every code and markdown cell. Click any cell header to collapse/expand it. Use <strong>Collapse All / Expand All</strong> to manage long notebooks.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Click <strong><i class="bi bi-download me-1" aria-hidden="true"></i>Download .ipynb</strong> to save the notebook to your computer.</div></li>
+        </ol>
+
+        <!-- ─── Submitting for Review ─── -->
+        <h2 class="section-anchor" id="submitting-notebook">
+            <i class="bi bi-check-circle me-2 text-primary" aria-hidden="true"></i>Submitting for Review
+        </h2>
+        <p>
+            If you receive a high-quality generated answer you think others would benefit from,
+            you can submit the notebook for admin review. Once approved it enters the
+            <strong>Verified Library</strong> and future similar questions receive an instant,
+            trusted answer.
+        </p>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">Open the notebook viewer (click <em>View Notebook</em> on any generated response).</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">Click <strong><i class="bi bi-check-circle me-1" aria-hidden="true"></i>Submit for Review</strong> in the modal footer.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">An admin will review the submission, optionally add notes, and approve or reject it.</div></li>
+        </ol>
+
+        <div class="callout callout-tip">
+            <i class="bi bi-lightbulb me-2 text-success" aria-hidden="true"></i>
+            Before submitting, verify the answer looks correct and the code runs without errors.
+            Admins can view the full notebook and answer preview before approving.
+        </div>
+
+        <!-- ─── Running in Jupyter ─── -->
+        <h2 class="section-anchor" id="running-notebook">
+            <i class="bi bi-play-circle me-2 text-primary" aria-hidden="true"></i>Running in Jupyter / Google Colab
+        </h2>
+        <h3>Jupyter Lab / Notebook</h3>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">Download the <code>.ipynb</code> file from the viewer.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">Open a terminal and run <code>pip install requests pandas</code> if not already installed.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Launch Jupyter: <code>jupyter lab</code> and open the downloaded file.</div></li>
+            <li class="step"><div class="step-num">4</div><div class="step-body">Run all cells with <kbd>Shift</kbd>+<kbd>Enter</kbd> or <strong>Run → Run All Cells</strong>.</div></li>
+        </ol>
+
+        <h3>Google Colab</h3>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">Go to <a href="https://colab.research.google.com" target="_blank" rel="noopener">colab.research.google.com</a>.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">Click <strong>File → Upload notebook</strong> and choose the downloaded <code>.ipynb</code>.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Click <strong>Runtime → Run all</strong>.</div></li>
+        </ol>
+
+        <!-- ═══════════════════════ ADMIN SECTION ═══════════════════════ -->
+        <h2 class="section-anchor" id="admin-overview">
+            <i class="bi bi-shield-lock me-2 text-warning" aria-hidden="true"></i>Admin Panel — Overview
+        </h2>
+        <div class="callout callout-admin">
+            <i class="bi bi-shield-lock me-2 text-primary" aria-hidden="true"></i>
+            The admin panel is only accessible to users with the <strong>admin</strong> role.
+            Visit <code>/admin</code> or click <em>Admin</em> in the navbar when logged in as an admin.
+        </div>
+        <p>The admin panel is organized into grouped sections in the left navigation:</p>
+        <div class="table-responsive">
+            <table class="table align-middle small">
+                <thead>
+                    <tr><th>Section</th><th>Purpose</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><i class="bi bi-grid-1x2 me-1" aria-hidden="true"></i><strong>Dashboard</strong></td><td>Submission stats, status breakdown, and 14-day query activity.</td></tr>
+                    <tr><td><i class="bi bi-hourglass-split me-1 text-warning" aria-hidden="true"></i><strong>Pending Review</strong></td><td>Notebook submissions waiting for approval or rejection.</td></tr>
+                    <tr><td><i class="bi bi-list-ul me-1" aria-hidden="true"></i><strong>All Submissions</strong></td><td>Full history of all submissions with status filter.</td></tr>
+                    <tr><td><i class="bi bi-patch-check me-1 text-success" aria-hidden="true"></i><strong>Verified Library</strong></td><td>Browse all approved notebooks; sync with GitHub.</td></tr>
+                    <tr><td><i class="bi bi-search me-1" aria-hidden="true"></i><strong>Search</strong></td><td>Semantic search against the verified library — useful for testing similarity.</td></tr>
+                    <tr><td><i class="bi bi-person-check me-1" aria-hidden="true"></i><strong>Approved Members</strong></td><td>Manage the email allowlist for social-login access.</td></tr>
+                    <tr><td><i class="bi bi-shield-lock me-1" aria-hidden="true"></i><strong>Admins</strong></td><td>Grant or revoke admin roles for other users.</td></tr>
+                    <tr><td><i class="bi bi-plug me-1" aria-hidden="true"></i><strong>MCP Servers</strong></td><td>Register and connect Model Context Protocol data servers.</td></tr>
+                    <tr><td><i class="bi bi-globe me-1" aria-hidden="true"></i><strong>CKAN Sites</strong></td><td>Register additional CKAN open-data portals.</td></tr>
+                    <tr><td><i class="bi bi-journal-text me-1" aria-hidden="true"></i><strong>Query Logs</strong></td><td>Per-user query history with source, confidence and timing.</td></tr>
+                    <tr><td><i class="bi bi-window me-1" aria-hidden="true"></i><strong>Landing Page</strong></td><td>Customize the public landing page title, tagline, and sample questions.</td></tr>
+                    <tr><td><i class="bi bi-github me-1" aria-hidden="true"></i><strong>GitHub Publishing</strong></td><td>Configure automatic notebook publishing to a GitHub repository.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- ─── Reviewing Submissions ─── -->
+        <h2 class="section-anchor" id="admin-review">
+            <i class="bi bi-hourglass-split me-2 text-warning" aria-hidden="true"></i>Reviewing Submissions
+        </h2>
+        <p>
+            When a user submits a notebook for review it appears in the <strong>Pending Review</strong>
+            section with a badge showing the count. The Dashboard stats update too.
+        </p>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">Click <strong>Review</strong> on any pending submission card to open the review modal.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">The modal shows the original <strong>query</strong>, the full <strong>answer preview</strong> (Markdown rendered), a complete <strong>notebook preview</strong> with syntax-highlighted code, and the <strong>agent logs</strong>.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Enter a <strong>Reason</strong> — it is recorded with the decision (and in the GitHub commit).</div></li>
+            <li class="step"><div class="step-num">4</div><div class="step-body">Click <span class="badge bg-success">Approve</span> to add it to the Verified Library, or <span class="badge bg-danger">Reject</span> to discard it. Both actions are permanent.</div></li>
+        </ol>
+
+        <div class="callout callout-warn">
+            <i class="bi bi-exclamation-triangle me-2 text-warning" aria-hidden="true"></i>
+            Before approving, make sure the code in the notebook correctly retrieves and analyzes
+            real data, the answer is factually accurate, and there are no hardcoded credentials.
+        </div>
+
+        <!-- ─── Approved Members ─── -->
+        <h2 class="section-anchor" id="admin-members">
+            <i class="bi bi-person-check me-2 text-warning" aria-hidden="true"></i>Approved Members
+        </h2>
+        <p>
+            Only emails on the <strong>Approved Members</strong> list can gain access via social login.
+            Users who sign in but aren't approved land on an "Awaiting Verification" page and a
+            pending access request is generated automatically.
+        </p>
+        <ul>
+            <li><strong>Add an email</strong> — enter the email address in the form and click <em>Approve</em>. The user can sign in immediately.</li>
+            <li><strong>Pending requests</strong> — shown at the top of the section (and as a badge in the nav) when users are waiting; click <em>Approve</em> or <em>Dismiss</em> directly from there.</li>
+            <li><strong>Remove access</strong> — click <i class="bi bi-trash text-danger" aria-hidden="true"></i> next to any approved email to revoke login access.</li>
+        </ul>
+
+        <!-- ─── CKAN Sites ─── -->
+        <h2 class="section-anchor" id="admin-ckan">
+            <i class="bi bi-globe me-2 text-warning" aria-hidden="true"></i>CKAN Sites
+        </h2>
+        <p>
+            Any CKAN-compatible open-data portal can be added as a data source. The agent will
+            include it when searching for datasets — no restart required.
+        </p>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">Click <strong><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Site</strong>.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">Enter the <strong>Portal Name</strong> (display label) and the <strong>CKAN Portal URL</strong> — the base URL without <code>/api/3</code> (e.g. <code>https://data.example.gov</code>).</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Optionally set a <strong>Site ID</strong> (auto-generated if blank), <strong>Default Organization</strong> slug, <strong>Description</strong>, <strong>Keywords</strong>, and a <strong>Quality Score</strong> (0–1, higher = preferred).</div></li>
+            <li class="step"><div class="step-num">4</div><div class="step-body">Click <strong>Add Site</strong>. The portal is available immediately for new queries.</div></li>
+        </ol>
+        <div class="callout callout-tip">
+            <i class="bi bi-lightbulb me-2 text-success" aria-hidden="true"></i>
+            Add relevant <strong>Keywords</strong> (e.g. "nyc, new york, housing") so the agent
+            automatically selects this portal when users ask about those topics.
+        </div>
+
+        <!-- ─── MCP Servers ─── -->
+        <h2 class="section-anchor" id="admin-mcp">
+            <i class="bi bi-plug me-2 text-warning" aria-hidden="true"></i>MCP Servers
+        </h2>
+        <p>
+            <strong>Model Context Protocol (MCP)</strong> servers extend Verikan with
+            additional data capabilities beyond CKAN — such as the U.S. Census Bureau and
+            FBI Crime Data Explorer servers that provide demographic and crime lookup tools.
+        </p>
+        <p>Three transport types are supported:</p>
+        <ul>
+            <li><strong>stdio (Process)</strong> — launches a local process (e.g. a Docker container or Node.js script). Requires a <em>Command</em>, optional <em>Arguments</em>, <em>Environment Variables</em>, and a <em>Working Directory</em>.</li>
+            <li><strong>SSE</strong> — connects to a remote server via HTTP Server-Sent Events. Requires just a <em>Server URL</em>.</li>
+            <li><strong>Streamable HTTP</strong> — connects to a remote server via the newer streamable-HTTP MCP transport. Requires just a <em>Server URL</em>.</li>
+        </ul>
+        <p>Once added, click <strong>Connect</strong> on a server card to discover its available tools. Connected tools appear as chips and can be invoked directly from the admin panel for testing.</p>
+
+        <!-- ─── Query Logs ─── -->
+        <h2 class="section-anchor" id="admin-logs">
+            <i class="bi bi-journal-text me-2 text-warning" aria-hidden="true"></i>Query Logs
+        </h2>
+        <p>
+            The <strong>Query Logs</strong> section records every question asked by logged-in users,
+            whether it was served from the verified cache or freshly generated.
+        </p>
+        <ul>
+            <li><strong>User filter</strong> — narrow to a specific user's history.</li>
+            <li><strong>Source filter</strong> — filter by <em>Generated</em>, <em>Verified cache</em>, or <em>Errors</em>.</li>
+            <li><strong>Refresh</strong> — click the refresh button to pull the latest entries.</li>
+        </ul>
+        <p>Each row shows the timestamp, user, query text, source, confidence score, and response time in milliseconds.</p>
+
+        <!-- ─── GitHub Publishing ─── -->
+        <h2 class="section-anchor" id="admin-github">
+            <i class="bi bi-github me-2 text-warning" aria-hidden="true"></i>GitHub Notebook Publishing
+        </h2>
+        <p>
+            Verikan can automatically push approved notebooks to a GitHub repository,
+            keeping a public or private archive of all verified community analysis.
+            Publishing is active whenever a repository and token are configured; use
+            <em>Pause</em> to halt all GitHub I/O without erasing the token.
+        </p>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">Go to <strong>Configuration → GitHub Publishing</strong>.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">Paste a <strong>GitHub Personal Access Token</strong> (PAT) with <code>repo</code> write scope. Leave blank to keep the existing token.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Enter the <strong>Repository</strong> in <code>owner/repo</code> format, the <strong>Branch</strong>, and separate folder paths for draft and verified notebooks.</div></li>
+            <li class="step"><div class="step-num">4</div><div class="step-body">Click <strong>Save Settings</strong>, then <strong>Test Connection</strong> to verify everything is working.</div></li>
+        </ol>
+
+        <!-- ─── Notebooks on GitHub ─── -->
+        <h2 class="section-anchor" id="github-notebooks">
+            <i class="bi bi-github me-2 text-warning" aria-hidden="true"></i>Reviewing &amp; Editing Notebooks on GitHub
+        </h2>
+        <p>
+            The configured GitHub repository is the <strong>source of truth</strong> for the
+            verified library. Every approved notebook is committed there, and any edits you make
+            on GitHub flow back into Verikan automatically the next time the notebook is fetched
+            (or immediately when an admin clicks <em>Sync from GitHub</em> in the Verified Library).
+            This lets subject-matter experts review and correct analysis directly in GitHub —
+            with full version history — without touching the app.
+        </p>
+
+        <h3><i class="bi bi-folder2-open me-2 text-primary" aria-hidden="true"></i>Where the notebooks live</h3>
+        <p>
+            Open the repository set in <strong>Configuration → GitHub Publishing</strong>
+            (in <code>owner/repo</code> form). Notebooks are organized into folders configured there:
+        </p>
+        <ul>
+            <li><strong>Verified folder</strong> (default <code>verified</code>) — approved, published notebooks that power instant Verified Answers.</li>
+            <li><strong>Drafts folder</strong> (default <code>drafts</code>) — submissions awaiting review.</li>
+            <li><strong>Verified answers folder</strong> (default <code>verified-answers</code>) — approved quick answers.</li>
+        </ul>
+
+        <h3><i class="bi bi-eye me-2 text-primary" aria-hidden="true"></i>Viewing &amp; reviewing a notebook</h3>
+        <p>GitHub renders <code>.ipynb</code> files natively — no download needed to read one.</p>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">Browse to the <strong>verified</strong> folder and click any <code>.ipynb</code> file. GitHub shows every markdown and code cell, plus any saved outputs, in order.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">Read the cell-by-cell logic: which dataset was queried, the SQL/Python used, and how the final numbers were computed. Confirm the answer text matches the outputs.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Open the <strong>commit history</strong> (the clock icon, or the <em>History</em> button) to see who approved or edited it and why — the reviewer's reason is recorded in the commit message. Use <em>Blame</em> to see when a specific line changed.</div></li>
+            <li class="step"><div class="step-num">4</div><div class="step-body">From the app side, the same notebook — with its full agent logs and a Typed Standards verify link — is available in the admin <strong>Verified Library</strong> via <em>View</em>.</div></li>
+        </ol>
+
+        <h3><i class="bi bi-patch-check me-2 text-primary" aria-hidden="true"></i>Validating reproducibility</h3>
+        <p>To independently confirm a notebook produces the numbers it claims:</p>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body">On the notebook's GitHub page, click <strong>Download raw file</strong> (or the <i class="bi bi-download" aria-hidden="true"></i> raw button) to get the <code>.ipynb</code>.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body">Open it in <a href="https://colab.research.google.com" target="_blank" rel="noopener">Google Colab</a> (<strong>File → Upload notebook</strong>) or local Jupyter, then <strong>Runtime → Run all</strong> / <strong>Run → Run All Cells</strong>.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Confirm the freshly-computed outputs match the committed ones and that every figure traces back to a cited source. Because notebooks fetch data live from the portal, small differences can indicate the underlying dataset was updated since approval.</div></li>
+        </ol>
+        <div class="callout callout-tip">
+            <i class="bi bi-lightbulb me-2 text-success" aria-hidden="true"></i>
+            You can also paste a notebook's GitHub URL into <a href="https://nbviewer.org" target="_blank" rel="noopener">nbviewer.org</a> for a clean, shareable rendered view without downloading anything.
+        </div>
+
+        <h3><i class="bi bi-pencil-square me-2 text-primary" aria-hidden="true"></i>Modifying a notebook</h3>
+        <ol class="steps">
+            <li class="step"><div class="step-num">1</div><div class="step-body"><strong>Small fixes</strong> — click the <i class="bi bi-pencil" aria-hidden="true"></i> pencil on the file in GitHub to edit it in the browser, then commit with a clear message explaining the change.</div></li>
+            <li class="step"><div class="step-num">2</div><div class="step-body"><strong>Larger changes</strong> — clone the repo, edit and re-run the notebook locally in Jupyter, and open a pull request so the change can be reviewed before it merges to the publishing branch.</div></li>
+            <li class="step"><div class="step-num">3</div><div class="step-body">Once your edit is on the configured branch, it becomes the source of truth. Verikan picks it up automatically the next time that notebook is served, or right away when an admin clicks <strong>Sync from GitHub</strong> in the Verified Library.</div></li>
+        </ol>
+        <div class="callout callout-warn">
+            <i class="bi bi-exclamation-triangle me-2 text-warning" aria-hidden="true"></i>
+            GitHub always wins: local edits made in Verikan while publishing is <em>paused</em> are not
+            pushed automatically, and a later sync from GitHub can overwrite them. Edit in GitHub (or
+            resume publishing first) to avoid losing work.
+        </div>
+
+        <!-- ─── Tips ─── -->
+        <h2 class="section-anchor" id="tips">
+            <i class="bi bi-lightbulb me-2 text-primary" aria-hidden="true"></i>Tips &amp; Tricks
+        </h2>
+        <ul>
+            <li><strong>Rephrase if the answer is wrong</strong> — try adding more context ("in the Hill District", "from 2022 to 2024") or simplifying the question.</li>
+            <li><strong>Use example questions as templates</strong> — click any of the pre-loaded examples on the landing page to see the format that works best.</li>
+            <li><strong>Bookmark your chat URL</strong> — each conversation has a unique hash URL; bookmark it to return directly.</li>
+            <li><strong>Download the notebook</strong> — even if you don't run it, the notebook shows the exact CKAN API calls used, which you can replicate manually.</li>
+            <li><strong>Check the confidence score</strong> — shown below freshly generated answers. Lower scores mean the model was less certain; treat those answers with extra skepticism.</li>
+            <li><strong>Press <kbd>?</kbd></strong> — opens the keyboard-shortcuts overlay in the chat.</li>
+        </ul>
+
+        <!-- ─── FAQ ─── -->
+        <h2 class="section-anchor" id="faq">
+            <i class="bi bi-question-circle me-2 text-primary" aria-hidden="true"></i>FAQ
+        </h2>
+
+        <h3>Why does the assistant say it can't find data?</h3>
+        <p>The agent searches registered CKAN portals and connected MCP servers. If no relevant
+        dataset is found it will say so honestly. Try rephrasing your question or ask an admin
+        to register an additional data portal.</p>
+
+        <h3>How recent is the data?</h3>
+        <p>The assistant fetches data live from CKAN portals at query time, so results are as
+        fresh as the portal's own update schedule. Most Pittsburgh/WPRDC datasets are updated
+        daily to monthly.</p>
+
+        <h3>Can I ask follow-up questions?</h3>
+        <p>Yes — within the same conversation, continue typing follow-up questions. The assistant
+        maintains context across messages in a single chat session.</p>
+
+        <h3>Is my query logged?</h3>
+        <p>When logged in, your queries are recorded in the server-side query log visible to
+        admins. This helps improve the system and build the verified notebook library.</p>
+
+        <h3>Why is a verified answer shown for a slightly different question?</h3>
+        <p>The system uses <strong>semantic similarity</strong> to match questions — not exact
+        text matching. If your question is at least 50% similar to a verified query, the
+        cached answer is served. You can still ask for a fresh analysis by rephrasing to be
+        more specific.</p>
+
+        <h3>Who do I contact for access issues?</h3>
+        <p>Contact your organization's Verikan administrator. If you used social login
+        and are waiting for approval, your admin was notified automatically.</p>
+
+    </div><!-- /.docs-inner -->
+
+        <footer class="site-footer">
+            <div class="site-footer-inner">
+                <div class="footer-brand">
+                    <a href="https://dathere.com" target="_blank" rel="noopener"
+                       class="d-inline-flex align-items-center" aria-label="datHere home">
+                        <img src="/static/images/logo-light.svg" alt="datHere" class="dc-logo footer-logo">
+                    </a>
+                    <p class="footer-tagline">Verikan is built by datHere — data wrangling, redefined.</p>
+                </div>
+                <nav class="footer-links" aria-label="datHere">
+                    <div class="footer-col">
+                        <span class="footer-col-title">Verikan</span>
+                        <a href="/library">Verified Library</a>
+                        <a href="/">Back to Chat</a>
+                        <a href="https://dathere.com/contact/" target="_blank" rel="noopener">Contact <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
+                    </div>
+                </nav>
+            </div>
+            <div class="site-footer-bottom">
+                <span>© 2026 datHere. All rights reserved.</span>
+                <span>The verified Data Concierge</span>
+            </div>
+        </footer>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Table-of-contents highlighting + mobile drawer.
+        const sections = document.querySelectorAll('.section-anchor');
+        const navLinks = document.querySelectorAll('.docs-nav-link');
+
+        function setActiveLink(link) {
+            navLinks.forEach(l => { l.classList.remove('active'); l.removeAttribute('aria-current'); });
+            if (link) {
+                link.classList.add('active');
+                link.setAttribute('aria-current', 'true');
+                // Keep the highlighted entry visible inside the scrolling sidebar
+                link.scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        const observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    setActiveLink(document.querySelector(`.docs-nav-link[href="#${entry.target.id}"]`));
+                }
+            });
+        }, { rootMargin: '-20% 0px -70% 0px' });
+        sections.forEach(s => observer.observe(s));
+
+        // Mobile TOC drawer + immediate highlight on click (the observer
+        // catches up after the scroll finishes).
+        const tocBtn = document.getElementById('docsTocBtn');
+        const tocBackdrop = document.getElementById('docsTocBackdrop');
+        function setTocOpen(open) {
+            document.body.classList.toggle('toc-open', open);
+            if (tocBtn) tocBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                setActiveLink(link);
+                setTocOpen(false);
+            });
+        });
+        if (tocBtn) tocBtn.addEventListener('click', () => setTocOpen(!document.body.classList.contains('toc-open')));
+        if (tocBackdrop) tocBackdrop.addEventListener('click', () => setTocOpen(false));
+    </script>
+    <script>
+        // Standalone admin-link reveal — docs.html does not load app.js, so this
+        // self-contained check mirrors app.js's adminNavBtn logic. The /admin
+        // route is backend-protected, so a non-admin never gains access; this
+        // just avoids showing them a button they can't use.
+        (async function revealAdminLink() {
+            try {
+                const res = await fetch('/api/v1/auth/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.authenticated && data.is_admin) {
+                    document.getElementById('docsAdminLink')?.classList.remove('d-none');
+                }
+            } catch { /* network error — leave the link hidden */ }
+        })();
+    </script>
+<script src="/static/js/theme.js?v=20260713-redesign"></script>
+</body>
+</html>
