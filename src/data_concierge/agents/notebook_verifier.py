@@ -15,8 +15,8 @@ This module closes it with two independent signals:
   re-deriving the number from the published code is much stronger evidence
   than string-matching it against text the model already had in context.
 
-A third signal, an adversarial static review of the method, is supplied
-separately by roborev and merged in by the caller.
+A third signal, an adversarial static review of the method, is produced by
+``agents/notebook_reviewer`` and merged in by the caller.
 
 Security
 --------

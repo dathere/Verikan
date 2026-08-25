@@ -8,13 +8,10 @@ wrong — the number was hardcoded instead of computed, the filter selects the
 wrong subset, the aggregation answers a different question, the citation
 points at a dataset the code never touches.
 
-This is the roborev role for the product's output: the same adversarial
-review posture the adversarial review harness applies to source code,
-applied to each generated notebook the moment it exists. The roborev CLI
-itself is a dev-machine daemon (post-commit hooks, a separately authenticated
-``claude`` CLI) and cannot run inside the Cloud Run container, so the review
-is made directly with the Anthropic SDK using roborev-style guidelines and
-severity-rated findings.
+This applies to the product's output the same adversarial posture a code
+review applies to source: read the artifact assuming it is wrong, and say
+concretely where. The review runs in-process via the Anthropic SDK against a
+set of guidelines, and returns severity-rated findings.
 
 Design rules, inherited from #131/#132:
 
