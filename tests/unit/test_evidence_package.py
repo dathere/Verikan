@@ -295,6 +295,7 @@ class TestCommitmentView:
             "captureMethod",
             "contentProfile",
             "signature",
+            "signer",
             "signerIdentity",
             "trustRegistryUrl",
             "subjectTitle",
@@ -305,6 +306,36 @@ class TestCommitmentView:
         assert cv["packageHash"] == pkg.envelope_hash
         assert cv["packageUrl"] == "https://example/nb.ipynb"
         assert cv["subjectTitle"] == "My analysis"
+
+    def test_signer_claim_mirrors_the_package(self, notebook, agent_log) -> None:
+        """§8.8.1: the view carries ``signer`` (the claim) as well as
+        ``signerIdentity`` (the informational block).
+
+        A verifier following a lifecycle chain reads
+        ``commitment.signer.identifier``. Emitting only ``signerIdentity``
+        leaves that empty, so a withdrawal or supersession would not resolve —
+        and nothing fails until the first such attestation is published.
+        """
+        pkg = build_evidence_package(
+            notebook_json=notebook, answer="A", query="Q", agent_log=agent_log
+        )
+        cv = pkg.commitment_view
+        assert cv["signer"] == pkg.package["signer"]
+        assert cv["signer"]["identifier"].startswith("platform:")
+        assert cv["signer"]["identifier"] == cv["signerIdentity"]["identifier"]
+
+    def test_signer_mirror_does_not_change_the_package_hash(
+        self, notebook, agent_log
+    ) -> None:
+        """The commitment view is built after the envelope hash and is not
+        hashed, so mirroring the signer into it must not move the content
+        address of any package."""
+        pkg = build_evidence_package(
+            notebook_json=notebook, answer="A", query="Q", agent_log=agent_log
+        )
+        from data_concierge.gateway.evidence import _sha256_hex, canonicalize_jcs
+
+        assert pkg.envelope_hash == _sha256_hex(canonicalize_jcs(pkg.package))
 
 
 class TestEmbedding:

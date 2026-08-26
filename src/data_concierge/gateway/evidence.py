@@ -55,8 +55,15 @@ from data_concierge.core.logging import get_logger
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
-# Spec constants (Typed Standards Specification v0.1, schema 0.1.0)
+# Spec constants (Typed Standards Specification, schema 0.1.0)
 # ---------------------------------------------------------------------------
+# The spec revision this implementation was verified against. Pin the tag
+# rather than tracking main: the vocabulary settlement landed across
+# v0.1.5-v0.1.7, and Appendix J of this tag carries the prior-era -> settlement
+# mapping plus the dual-era rules (J.4 rule 1: an identifier frozen inside an
+# already-signed artifact is never rewritten -- which is why the
+# ``datHere-evidence:`` package-id literal must never be "fixed").
+SPEC_REVISION = "v0.1.7-typed-standards-spec"
 SCHEMA_VERSION = "0.1.0"
 CONTENT_PROFILE = "datHere"
 PRODUCER_PROFILE = "ai-assisted-analysis/datHere"
@@ -520,6 +527,14 @@ def build_evidence_package(
         "captureMethod": CAPTURE_METHOD,
         "contentProfile": CONTENT_PROFILE,
         "signature": signature.as_dict(),
+        # §8.8.1 expects BOTH: ``signer`` is the claim a verifier reads when it
+        # follows a lifecycle chain (commitment.signer.identifier), and
+        # ``signerIdentity`` is the informational block describing the
+        # publisher. Emitting only the latter left the identifier empty, so a
+        # withdrawal or supersession chain would not resolve. Same object the
+        # package carries; the commitment view is not hashed, so this changes
+        # no packageHash.
+        "signer": signer_identity,
         "signerIdentity": signer_identity,
         "trustRegistryUrl": TRUST_REGISTRY_URL,
         "subjectTitle": title or (query or "Verified analysis")[:120],
@@ -559,7 +574,12 @@ def _cell0_markdown(cv: dict[str, Any]) -> dict[str, Any]:
         f"| Attestations | {len(cv.get('attestations', []))} |",
         f"| Trust registry | {cv.get('trustRegistryUrl')} |",
         "",
-        f"[Verify with Typed Standards](https://typedstandards.org/verify?hash={cv.get('packageHash', '')})",
+        # Host-anchored short link: ``/verify/{host}/{hash}`` resolves directly
+        # against our origin. A bare ``?hash=`` is origin-less and resolves
+        # against the directory's anchor host instead, landing the reader on a
+        # host-picker rather than on the verified record.
+        f"[Verify with Typed Standards]"
+        f"(https://typedstandards.org/verify/{EVIDENCE_HOST}/{cv.get('packageHash', '')})",
         "",
         "_This table is a reader affordance; the authoritative metadata is the "
         "`org.civicaitools.evidence` namespace in this notebook's root metadata._",
