@@ -4,7 +4,7 @@
 
 ### The verified Data Concierge
 
-**Ask a question about public data in plain English. Get a citation-backed answer — and the reproducible notebook that derives it.**
+**Verikan takes the friction out of turning data into verifiable answers. Ask questions about your data in plain English – the system finds the right dataset – and Verikan enriches it with data from high-value data sources, runs real Python code against it, and explains the results clearly. Every answer is reproducible, citable, independently verifiable, and yours to keep. Over time, this positive feedback loop creates a Knowledgebase of Verified, Evidence-based Answers.**
 
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
