@@ -21,7 +21,7 @@
 ---
 ## Background 
 
-Verikan was built and used at datHere for about a year before this release. What's here is that same system, now open source under MIT — which is also why some of the tooling has a backlog
+Verikan was built and used at datHere for about a year before this release. What's here is that same system, now open source under MIT. which is also why some of the tooling has a backlog
 
 ## Why this exists
 
