@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src/ tests/ scripts/
+
+      # No env vars and no secrets: the suite is hermetic. Every outbound call
+      # is mocked, storage is redirected at a temp dir by tests/conftest.py,
+      # and the notebook-verification tests get their Jupyter kernel from the
+      # venv's own kernelspec (ipykernel is a dependency).
+      #
+      # Do not add `working-directory` here — mcp/registry.py resolves its
+      # config relative to the process cwd, and four tests read it.
+      - name: Test
+        run: pytest -q --no-cov
+
+  types:
+    name: types & formatting (advisory)
+    runs-on: ubuntu-latest
+    # Advisory only. Both checks carry a backlog inherited from before this
+    # project was open sourced; they report so the debt stays visible, but they
+    # do not block a pull request. See CONTRIBUTING.md.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Formatting drift
+        run: ruff format --check src/ tests/ scripts/ || true
+
+      - name: Type check
+        run: mypy src/ || true

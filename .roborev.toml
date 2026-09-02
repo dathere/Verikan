@@ -1,0 +1,125 @@
+# roborev — adversarial review of each pull request.
+#
+# Run in CI by .github/workflows/roborev.yml. To run it locally instead:
+#   brew install roborev-dev/tap/roborev
+#   roborev review --dirty          # review uncommitted changes
+#   roborev review --branch         # review the whole branch
+# Docs: https://roborev.io
+
+agent = "claude-code"
+model = "sonnet"
+
+review_reasoning = "thorough"
+review_min_severity = "medium"
+review_context_count = 5
+display_name = "Verikan"
+
+# Generated or vendored files carry no review signal and blow up the diff.
+exclude_patterns = [
+  "uv.lock",
+  "*.ipynb",
+  "docs/screenshots/**",
+  "src/data_concierge/ui/static/vendor/**",
+]
+
+review_guidelines = """
+Verikan — a FastAPI + LangGraph service that answers natural-language questions about public
+statistical data and emits a reproducible Jupyter notebook, with citations, for every answer.
+
+Python 3.11, Pydantic v2, ruff (line length 100). `src/data_concierge/ui/web.py` is the real
+entrypoint; `api/main.py` is a secondary REST-only app.
+
+Flag these project-specific defects. They are recurring, they pass tests, and they are the
+reason this review exists.
+
+## Agent graph and state
+
+- `GraphState` (`agents/state.py`) is a `TypedDict`, NOT a Pydantic model — LangGraph requires
+  this. Attribute access (`state.query`), `.model_dump()`, validators, or defaults-on-construct
+  are bugs. Reads must tolerate missing keys (`state.get(...)`).
+- Two graphs exist, selected by `data_source` in `supervisor.process_query` via
+  `is_llm_graph_source()`: the deterministic Data Commons graph and the LLM-driven CKAN/MCP
+  graph. A change to shared state, confidence, or notebook generation reasoned through on only
+  one graph is incomplete — say which graph was missed.
+- Notebook generation is driven entirely by `state["execution_trace"]`. Any agent action that
+  retrieves, computes, visualizes or cites must append its entry (with the code snippet), or
+  the generated notebook is silently incomplete and irreproducible.
+- `state["agent_log"]` is the evidence record behind every published answer, versioned by
+  `AGENT_LOG_FORMAT_VERSION`. Changing its shape without bumping that constant breaks
+  downstream evidence consumers. Entries must preserve verbatim tool output and provenance —
+  paraphrasing, truncating without marking it, or dropping the source reference defeats it.
+
+## Generated notebooks
+
+- Every generated code cell must be valid Python. Codegen interpolates tool arguments and
+  retrieved content, so anything embedded must go through `repr()` or an equivalent — an
+  f-string that pastes raw JSON or untrusted text produces a cell that will not parse, and one
+  such cell fails verification for the whole notebook.
+- A figure in the answer must be derived by a cell, not asserted in markdown. Hardcoding a
+  result that the code does not compute is the defect the adversarial notebook review exists
+  to catch; do not introduce it in the generator.
+
+## Confidence
+
+- `core/confidence.py` is a weighted composite. A factor that could not be computed must be
+  `None` with a reason in `unavailable` — never `0.0` and never a stand-in constant, which is
+  indistinguishable from a measured-bad score. Flag any new all-zeros or default-value
+  fallback, and any branch on `final_score` that ignores `measured_weight`.
+
+## Routing and API
+
+- Route order in `gateway/router.py` is load-bearing: specific paths must be declared before
+  wildcards such as `/{query_id}`, or the wildcard captures them. A new specific route added
+  below a wildcard is a defect even though it looks fine in isolation.
+
+## User-facing failure behaviour
+
+- `/query` must never surface a raw exception, stack trace, or generic "something went wrong".
+  Every failure path returns a friendly answer plus `suggested_questions` so the user has
+  somewhere to go. A new `except` that returns a bare error string is a defect.
+- Narrow the exception being caught. A blanket `except Exception` that swallows the cause and
+  logs nothing makes production failures undiagnosable.
+
+## Untrusted input and containment
+
+- Notebooks are LLM-generated and dataset text from open data portals reaches the generator,
+  so notebook content is untrusted. Execution must stay inside the subprocess containment:
+  env allowlist, timeout, shell-escape cells skipped, egress guard. Flag anything that widens
+  that boundary or executes generated code in-process.
+- MCP server URLs are validated against loopback, private, link-local and cloud-metadata
+  addresses (`mcp/guards.py`). Flag any new outbound fetch built from user- or
+  admin-supplied input that bypasses that check.
+
+## Secrets and configuration
+
+- Never introduce a code path that writes a live credential into a tracked file.
+  `configs/mcp_servers.json` is tracked and rewritten at runtime — flag any write to a tracked
+  config that could include a secret.
+- Runtime-seeded state (`users.json`, `roles.json`, `*_settings.json`, `query_logs/`,
+  `chats/`, `feedback/`, `verified_notebooks/`) is gitignored deliberately. Flag anything that
+  adds one back to the index.
+- All secrets are `SecretStr` in `core/config.py`. Flag logging or serializing one. Flag any
+  new default that points a fresh install at someone else's infrastructure.
+
+## Web UI
+
+- `ui/static/js/*.js` binds to DOM ids in the Jinja templates. Renaming or removing an id in a
+  template without updating the JS silently breaks the feature — no error, just a dead
+  control. Check both sides of any id change.
+- The design system is token-based and supports light and dark. A hardcoded hex colour in a
+  template or stylesheet, rather than a theme token, is a defect.
+
+## Async and resources
+
+- All HTTP clients are async httpx, initialized lazily. Flag blocking I/O inside an async
+  path, a client created per request rather than reused, and any client never closed.
+- Session storage (`gateway/session.py`) is an in-memory dict cleaned lazily on access. Flag
+  new unbounded in-memory dicts keyed by user or session with no expiry.
+
+## Review style
+
+Report concrete defects with the failing scenario spelled out — the input or state, and the
+wrong result. Skip style nits that ruff already enforces, and skip pre-existing formatting and
+typing debt, which is tracked separately. Prefer a short list of real problems over broad
+coverage.
+"""

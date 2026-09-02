@@ -106,6 +106,13 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
+    # UP042 wants `class X(str, Enum)` rewritten to `StrEnum`. That is not a
+    # behaviour-preserving change here: with `(str, Enum)`, `str(X.MEMBER)` and
+    # f-strings render "X.MEMBER", while StrEnum renders the value. These enums
+    # are serialised through Pydantic models and interpolated into prompts,
+    # notebooks and logs, so the rewrite would silently change output. Revisit
+    # deliberately, with those call sites audited — not as a lint autofix.
+    "UP042", # str-enum inheritance; see above
 ]
 
 [tool.ruff.lint.isort]

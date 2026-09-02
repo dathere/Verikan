@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Actions pinned by major version drift and are a supply-chain surface worth
+  # keeping current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci:"
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "docker:"
+
+# Python dependencies are deliberately not tracked here: the app pins loose
+# ranges in pyproject.toml, and a monthly flood of pip PRs against an alpha
+# project costs more review time than it saves. Revisit once releases are cut.

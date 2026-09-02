@@ -1,0 +1,65 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. If this is a **security** issue, please don't file it here —
+        see [SECURITY.md](https://github.com/dathere/Verikan/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Asked "..."
+        2. ...
+    validations:
+      required: true
+
+  - type: input
+    id: question
+    attributes:
+      label: The question you asked
+      description: If this happened during a query, the exact wording helps — routing depends on it.
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: Data source
+      description: Shown in the admin query log; the chat UI uses WPRDC by default.
+      options:
+        - WPRDC / CKAN portal
+        - Data Commons
+        - MCP server (Census, FBI Crime, other)
+        - Not applicable / don't know
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Server output around the failure. Redact any API keys.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit SHA or release you're running.
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.11.x"

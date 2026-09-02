@@ -1,0 +1,75 @@
+# Adversarial review of each pull request.
+#
+# roborev (https://roborev.io) runs a review matrix against the PR diff and
+# posts a single synthesized comment. It reads .roborev.toml for the review
+# types, severity floor and this project's guidelines; `ci review` needs no
+# daemon and no database.
+#
+# Setup: add an ANTHROPIC_API_KEY repository secret. Without it this workflow
+# reports "not configured" and succeeds — it never blocks a pull request.
+name: roborev
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: roborev-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: adversarial review
+    runs-on: ubuntu-latest
+    # Secrets are not exposed to pull requests from forks, so the review can
+    # only run for branches on this repository.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+
+    steps:
+      - name: Skip when no API key is configured
+        if: env.HAS_KEY != 'true'
+        run: |
+          echo "::notice title=roborev::No ANTHROPIC_API_KEY secret is set — skipping the adversarial review."
+
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+        with:
+          # The review diffs base..head, so it needs the full history.
+          fetch-depth: 0
+
+      - name: Install roborev
+        if: env.HAS_KEY == 'true'
+        run: |
+          curl -fsSL https://roborev.io/install.sh | bash
+          # install.sh picks /usr/local/bin or ~/.local/bin; add the latter in
+          # case it chose that, then fail loudly here rather than mysteriously
+          # at review time if the binary is not on PATH.
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify roborev is on PATH
+        if: env.HAS_KEY == 'true'
+        run: roborev --version
+
+      - name: Install the review agent
+        if: env.HAS_KEY == 'true'
+        run: npm install -g @anthropic-ai/claude-code@latest
+
+      - name: Review
+        if: env.HAS_KEY == 'true'
+        env:
+          # The agent authenticates with this; roborev strips ambient
+          # ANTHROPIC_* from the agent subprocess and re-injects it.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Posting the comment goes through the GitHub REST API, which reads
+          # GH_TOKEN/GITHUB_TOKEN. This is NOT ambient in Actions and must be
+          # mapped explicitly, or --comment fails to post. roborev deliberately
+          # strips it from the agent subprocess, so the untrusted PR diff never
+          # sees the token.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: roborev ci review --comment --upsert-comments --agent claude-code

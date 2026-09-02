@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/dathere/Verikan/security/advisories/new
+    about: Report privately — please do not open a public issue.
+  - name: Setup and usage questions
+    url: https://github.com/dathere/Verikan/discussions
+    about: Ask a question or share what you built.
