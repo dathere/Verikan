@@ -37,7 +37,7 @@ jobs:
         run: |
           echo "::notice title=roborev::No ANTHROPIC_API_KEY secret is set — skipping the adversarial review."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.HAS_KEY == 'true'
         with:
           # The review diffs base..head, so it needs the full history.
