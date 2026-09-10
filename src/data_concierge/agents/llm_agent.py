@@ -265,6 +265,35 @@ def _all_portal_configs() -> dict[str, dict[str, Any]]:
 _PORTAL_TYPE_DCAT = "dcat"
 _PORTAL_TYPE_CKAN = "ckan"
 
+# Status codes meaning "this endpoint does not work on this portal", as opposed
+# to "this particular query was bad". CKAN answers a malformed or failing SQL
+# statement with 400/409 and a JSON error — those are worth another attempt
+# with different SQL. These are not: the DataStore extension is disabled, or a
+# CDN/WAF sits in front of it (WPRDC currently answers 403 with a CloudFront
+# error page). Retrying any of them just burns turns and depresses the
+# retrieval-success confidence signal.
+_SQL_ENDPOINT_DEAD_STATUSES = frozenset({401, 403, 404, 405, 501})
+
+# How long a portal stays marked SQL-less. The agent is a process-lifetime
+# singleton, so without an expiry a single transient block would disable SQL
+# until the instance recycled; without any memory, every query would re-probe.
+_SQL_DISABLED_TTL_SECONDS = 30 * 60
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _summarize_error_body(text: str, limit: int = 200) -> str:
+    """Condense an error body for the model.
+
+    A blocked endpoint returns an HTML error page; pasting 500 characters of
+    it into the conversation tells the model nothing and wastes context.
+    """
+    if not text:
+        return ""
+    stripped = _HTML_TAG_RE.sub(" ", text)
+    collapsed = " ".join(stripped.split())
+    return collapsed[:limit]
+
 
 def _normalize_portal_type(raw: Any) -> str:
     value = str(raw or "").strip().lower()
@@ -497,6 +526,9 @@ class LLMAnalysisAgent(BaseAgent):
         self._anthropic: Any = None
         self._http_clients: dict[str, httpx.AsyncClient] = {}
         self._dcat_clients: dict[str, Any] = {}  # portal_url -> DCATClient
+        # portal_url -> (expires_at, status_code) for portals whose DataStore
+        # SQL endpoint answered with an endpoint-level failure.
+        self._sql_disabled: dict[str, tuple[float, int]] = {}
         self._pinecone_store: Any = None  # lazy-init on first semantic search
         # Register so the FastAPI lifespan shutdown can drain our per-portal
         # CKAN connection pools (issue #96).
@@ -1148,7 +1180,65 @@ class LLMAnalysisAgent(BaseAgent):
             lines.append(df.to_string(index=False, max_colwidth=40))
         return "\n".join(lines)
 
+    def _sql_unavailable_status(self, portal_url: str) -> int | None:
+        """Status that disabled SQL for this portal, or ``None`` if usable."""
+        entry = self._sql_disabled.get(portal_url)
+        if not entry:
+            return None
+        expires_at, status = entry
+        if time.time() >= expires_at:
+            del self._sql_disabled[portal_url]
+            return None
+        return status
+
+    def _disable_sql(self, portal_url: str, status: int) -> None:
+        self._sql_disabled[portal_url] = (
+            time.time() + _SQL_DISABLED_TTL_SECONDS,
+            status,
+        )
+        self.logger.warning(
+            "DataStore SQL disabled for portal",
+            portal_url=portal_url,
+            status=status,
+            ttl_seconds=_SQL_DISABLED_TTL_SECONDS,
+        )
+
+    # Prefix marking a tool result that is neither a retrieval success nor a
+    # retrieval failure: the capability does not exist on this portal. It is
+    # excluded from the success-rate accounting entirely — counting it as a
+    # success would inflate a user-visible confidence number with a call that
+    # fetched nothing, and counting it as a failure would penalise the agent
+    # for correctly routing around a portal-side outage.
+    TOOL_UNAVAILABLE_PREFIX = "Tool unavailable:"
+
+    @staticmethod
+    def _sql_unavailable_message(status: int, detail: str = "") -> str:
+        """What the model is told when SQL cannot work on this portal.
+
+        Phrased as a standing fact plus the alternative, because the previous
+        message (an HTTP status and a slab of HTML) read like a transient
+        failure and the model retried it five times per query.
+        """
+        suffix = f" Portal said: {detail}" if detail else ""
+        return (
+            f"{LLMAnalysisAgent.TOOL_UNAVAILABLE_PREFIX} "
+            f"run_sql_query is NOT available on this portal — its DataStore SQL "
+            f"endpoint returned HTTP {status}, which means the endpoint is "
+            f"blocked or not enabled rather than the query being wrong. "
+            f"Do NOT call run_sql_query against this portal again; every retry "
+            f"will fail the same way. Use load_resource_data instead (it "
+            f"accepts filters, q, sort, fields, and limit) and aggregate the "
+            f"rows yourself.{suffix}"
+        )
+
     async def _tool_sql(self, client: httpx.AsyncClient, params: dict) -> str:
+        portal_url = str(client.base_url).rstrip("/")
+
+        # Already known dead for this portal: answer without a round trip.
+        known = self._sql_unavailable_status(portal_url)
+        if known is not None:
+            return self._sql_unavailable_message(known)
+
         raw_sql = params["sql"]
         try:
             sql = _validate_select_sql(raw_sql)
@@ -1167,8 +1257,20 @@ class LLMAnalysisAgent(BaseAgent):
                 "execution timeout. Narrow the query (add filters, "
                 "aggregate, or reduce the result set)."
             )
+        if resp.status_code in _SQL_ENDPOINT_DEAD_STATUSES:
+            # Endpoint-level failure: remember it so the rest of this query —
+            # and the next one against the same portal — skips SQL entirely.
+            self._disable_sql(portal_url, resp.status_code)
+            return self._sql_unavailable_message(
+                resp.status_code, _summarize_error_body(resp.text)
+            )
         if resp.status_code != 200:
-            return f"SQL error (HTTP {resp.status_code}): {resp.text[:500]}"
+            # Query-level failure (CKAN uses 400/409): a different statement
+            # may well succeed, so this stays retryable.
+            return (
+                f"SQL error (HTTP {resp.status_code}): "
+                f"{_summarize_error_body(resp.text, 400)}"
+            )
 
         data = resp.json()
         if not data.get("success"):
@@ -1638,6 +1740,26 @@ class LLMAnalysisAgent(BaseAgent):
                 )
             else:
                 all_tools = list(TOOLS)
+                # A portal whose SQL endpoint is known dead should not be
+                # offered run_sql_query at all. The breaker in _tool_sql
+                # already answers without a round trip, but a tool the model
+                # cannot see is a turn it cannot waste — and the DCAT branch
+                # sets the same precedent for portals that never had SQL.
+                sql_status = self._sql_unavailable_status(portal_cfg["url"].rstrip("/"))
+                if sql_status is not None:
+                    all_tools = [t for t in all_tools if t["name"] != "run_sql_query"]
+                    system_prompt += (
+                        "\n\n## Note on SQL\n"
+                        f"This portal's DataStore SQL endpoint is unavailable "
+                        f"(HTTP {sql_status}), so `run_sql_query` has been removed "
+                        "from your tools. Load rows with `load_resource_data` and "
+                        "aggregate them yourself.\n"
+                    )
+                    self.logger.info(
+                        "run_sql_query withheld — portal SQL unavailable",
+                        portal_url=portal_cfg["url"],
+                        status=sql_status,
+                    )
                 if mcp_tools:
                     all_tools.extend(mcp_tools)
                     mcp_names = [t["name"] for t in mcp_tools]
@@ -1801,8 +1923,35 @@ class LLMAnalysisAgent(BaseAgent):
                         tool_elapsed_ms = round((time.monotonic() - tool_start) * 1000)
 
                         # ── Capture confidence signals ───────────
-                        is_error = result_text.startswith(("Error:", "HTTP ", "SQL error"))
-                        if is_error:
+                        # A capability the portal does not have is neither a
+                        # success nor a failure — it is excluded from the
+                        # success-rate denominator so the rate keeps measuring
+                        # only calls that actually attempted retrieval.
+                        is_unavailable = result_text.startswith(
+                            self.TOOL_UNAVAILABLE_PREFIX
+                        )
+                        is_error = not is_unavailable and result_text.startswith(
+                            ("Error:", "HTTP ", "SQL error")
+                        )
+                        if is_unavailable:
+                            # Withdraw the tool for the REST of this run, not
+                            # just the next one. Telling the model in prose not
+                            # to retry did not work — a measured trial had it
+                            # call run_sql_query five times after being told the
+                            # endpoint was blocked. `tools` is re-read every
+                            # iteration, so removing it here actually stops it.
+                            before = len(all_tools)
+                            all_tools = [
+                                t for t in all_tools if t.get("name") != tool_name
+                            ]
+                            self.logger.info(
+                                "Tool unavailable on this portal — excluded from "
+                                "retrieval success rate and withdrawn for the "
+                                "rest of this run",
+                                tool=tool_name,
+                                withdrawn=before != len(all_tools),
+                            )
+                        elif is_error:
                             failed_tool_calls += 1
                             # Detect SQL retries: same resource queried
                             # again after a previous SQL error
