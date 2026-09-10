@@ -7,7 +7,7 @@ import secrets
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -764,9 +764,25 @@ async def revoke_admin_role(
 
 
 class AddCkanSiteRequest(BaseModel):
-    """Request body for adding a new CKAN site to the registry."""
+    """Request body for adding a new portal to the registry."""
 
-    url: str = Field(..., min_length=4, max_length=400, description="CKAN portal URL")
+    url: str = Field(..., min_length=4, max_length=400, description="Portal URL")
+    portal_type: Literal["ckan", "dcat"] = Field(
+        default="ckan",
+        description=(
+            "Access mechanism: 'ckan' for a live CKAN action API, 'dcat' for a "
+            "portal publishing a DCAT catalog document (/data.json)"
+        ),
+    )
+    catalog_url: str | None = Field(
+        default=None,
+        max_length=400,
+        description=(
+            "DCAT only. Explicit catalog document URL; when omitted the "
+            "standard paths (/data.json, /api/dcat.json, /catalog.json) are "
+            "probed under the portal URL."
+        ),
+    )
     name: str = Field(..., min_length=1, max_length=200, description="Display name")
     site_id: str | None = Field(
         default=None,
@@ -784,9 +800,11 @@ class AddCkanSiteRequest(BaseModel):
 
 
 class UpdateCkanSiteRequest(BaseModel):
-    """Partial update payload for an existing CKAN site."""
+    """Partial update payload for an existing portal."""
 
     url: str | None = None
+    portal_type: Literal["ckan", "dcat"] | None = None
+    catalog_url: str | None = Field(default=None, max_length=400)
     name: str | None = None
     organization: str | None = None
     description: str | None = None
@@ -819,6 +837,8 @@ async def add_ckan_site(
             quality_score=request.quality_score,
             keywords=request.keywords,
             added_by=admin_user.get("user", "admin"),
+            portal_type=request.portal_type,
+            catalog_url=request.catalog_url,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -856,6 +876,112 @@ async def delete_ckan_site(
     return {"message": f"CKAN site '{site_id}' removed"}
 
 
+# =============================================================================
+# Portal Onboarding Jobs (admin-only)
+# =============================================================================
+
+
+class StartOnboardingJobRequest(BaseModel):
+    """Options for an onboarding run.
+
+    Only these fields become command-line arguments, and each is validated in
+    ``gateway.onboarding_jobs.build_command`` before the child is spawned. The
+    *script* is chosen from the portal's registered type, never from here.
+    """
+
+    site_id: str = Field(..., min_length=1, max_length=80)
+    skip_qsv: bool = Field(default=False, description="Skip qsv describegpt (no LLM calls)")
+    skip_download: bool = Field(default=False, description="Reuse CSVs already on disk")
+    no_sync: bool = Field(default=False, description="Skip syncing to the storage backend")
+    rebuild_index: bool = Field(
+        default=False, description="Rebuild the index from files on disk; no downloads"
+    )
+    dataset_filter: str | None = Field(default=None, max_length=200)
+    limit: int | None = Field(default=None, ge=0, le=5000, description="DCAT only")
+    concurrency: int | None = Field(default=None, ge=1, le=10)
+    max_mb: int | None = Field(default=None, ge=1, le=2000, description="DCAT only")
+    pinecone: bool = Field(default=False, description="Upload the built index to Pinecone")
+    pinecone_dry_run: bool = Field(default=False)
+    pinecone_namespace: str | None = Field(default=None, max_length=64)
+    pinecone_index: str | None = Field(default=None, max_length=64)
+
+
+@router.get("/admin/onboarding-jobs")
+async def list_onboarding_jobs(
+    _admin: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """Recent onboarding runs, plus anything about this host that would break one."""
+    from data_concierge.gateway import onboarding_jobs
+
+    jobs = onboarding_jobs.list_jobs()
+    return {
+        "count": len(jobs),
+        "jobs": jobs,
+        "running_job_id": onboarding_jobs.running_job_id(),
+        "warnings": onboarding_jobs.runtime_warnings(),
+    }
+
+
+@router.post("/admin/onboarding-jobs")
+async def start_onboarding_job(
+    request: StartOnboardingJobRequest,
+    admin_user: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """Start an onboarding run for a registered portal."""
+    from data_concierge.gateway import onboarding_jobs
+
+    site = ckan_sites_store.get_site(request.site_id)
+    if not site:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Portal '{request.site_id}' is not registered",
+        )
+
+    options = request.model_dump(exclude={"site_id"})
+    try:
+        job = await onboarding_jobs.start_job(
+            site, options, started_by=admin_user.get("user", "admin")
+        )
+    except onboarding_jobs.JobError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    return {"message": f"Onboarding job started for '{site['id']}'", "job": job}
+
+
+@router.get("/admin/onboarding-jobs/{job_id}")
+async def get_onboarding_job(
+    job_id: str,
+    log_offset: int = 0,
+    _admin: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """One job with the slice of its log after ``log_offset`` (for tailing)."""
+    from data_concierge.gateway import onboarding_jobs
+
+    job = onboarding_jobs.get_job(job_id, log_offset=log_offset)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Job '{job_id}' not found"
+        )
+    return {"job": job}
+
+
+@router.post("/admin/onboarding-jobs/{job_id}/cancel")
+async def cancel_onboarding_job(
+    job_id: str,
+    _admin: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """Terminate a running onboarding job."""
+    from data_concierge.gateway import onboarding_jobs
+
+    if not await onboarding_jobs.cancel_job(job_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Job '{job_id}' is not running",
+        )
+    return {"message": f"Job '{job_id}' cancelled"}
+
+
 # Public read-only endpoint — lets the UI populate a picker without admin auth.
 @router.get("/ckan-sites")
 async def list_ckan_sites_public() -> dict[str, Any]:
@@ -869,6 +995,8 @@ async def list_ckan_sites_public() -> dict[str, Any]:
             "organization": s.get("organization"),
             "description": s.get("description", ""),
             "quality_score": s.get("quality_score", 0.85),
+            "portal_type": ckan_sites_store.normalize_portal_type(s.get("portal_type")),
+            "catalog_url": s.get("catalog_url") or None,
         }
         for s in sites
     ]
@@ -1037,7 +1165,7 @@ async def admin_list_notebook_reviews(
     """Notebook verification + adversarial review results (admin only).
 
     One record per generated notebook: whether it executed, whether its
-    output reconciles with the answer, the adversarial method-review
+    output reconciles with the answer, the roborev-style method-review
     findings, and how the combined verdict moved the confidence score.
     """
     from data_concierge.gateway.notebook_verification import (
@@ -3413,7 +3541,7 @@ class GitHubSettingsRequest(BaseModel):
 
     token: str = Field(default="", description="GitHub personal access token")
     repo: str = Field(
-        default="", description="GitHub repo (owner/name)"
+        default="dathere/data-concierge-notebooks", description="GitHub repo (owner/name)"
     )
     branch: str = Field(default="main", description="Target branch")
     drafts_folder: str = Field(default="drafts", description="Folder for draft notebooks")

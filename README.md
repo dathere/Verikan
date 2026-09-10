@@ -193,7 +193,7 @@ All settings come from `.env` (see [`.env.example`](.env.example)). **Only
 | Variable | Enables | Without it |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | All analysis | UI loads; queries can't run |
-| *(none needed)* | **WPRDC / CKAN open data portals** | works out of the box |
+| *(none needed)* | **CKAN and DCAT open data portals** | works out of the box |
 | `BLS_API_KEY` | Bureau of Labor Statistics | 25 requests/day instead of 500 |
 | `CENSUS_API_KEY` | Census Bureau | Census queries unavailable |
 | `BEA_API_KEY` | Bureau of Economic Analysis (GDP) | BEA queries unavailable |
@@ -269,8 +269,12 @@ the public WPRDC portal works without it.
 
 Two LangGraph graphs, selected by data source:
 
-- **LLM-driven graph** (CKAN / WPRDC / MCP sources) — Claude drives retrieval with tool
+- **LLM-driven graph** (CKAN / DCAT / MCP sources) — Claude drives retrieval with tool
   calling: search datasets, inspect them, load rows, run SQL, then write the answer.
+  The same tool names are dispatched by portal type, so adding a portal needs no new
+  code: a **CKAN** portal answers through its live action API, while a **DCAT** portal
+  (the `/data.json` catalog served by Socrata, ArcGIS Hub, data.gov and others) has its
+  catalog fetched once, searched locally, and its distributions streamed with a row cap.
 - **Deterministic graph** (Data Commons) — parse entities → route → retrieve → compute →
   visualise → cite → generate notebook.
 
@@ -297,7 +301,7 @@ src/data_concierge/
     session.py, chats.py     # Session and chat storage
   agents/
     supervisor.py            # Builds both graphs; routes by data source
-    llm_agent.py             # LLM-driven agent for CKAN / MCP sources
+    llm_agent.py             # LLM-driven agent for CKAN / DCAT / MCP sources
     query_parser.py          # Entity extraction for the deterministic graph
     data_finder.py           # Data Commons retrieval
     stats_computer.py        # Statistical computation
@@ -307,7 +311,10 @@ src/data_concierge/
     notebook_verifier.py     # Executes a notebook, reconciles output vs answer
     notebook_reviewer.py     # Adversarial method review
     notebook_editor.py       # Edits a notebook per a chat follow-up
-  data_layer/connectors/     # Data Commons, BLS, Census, BEA, FRED, CKAN, Pinecone
+  data_layer/connectors/     # Data Commons, BLS, Census, BEA, FRED, CKAN, DCAT, Pinecone
+  data_layer/qsv_profiling.py   # Shared qsv passes behind portal onboarding
+  data_layer/pinecone_upload.py # Builds embeddable records from onboarded metadata
+  gateway/onboarding_jobs.py    # Runs/monitors onboarding as supervised child processes
   mcp/                       # Model Context Protocol client, registry, connector
   core/
     config.py                # All settings

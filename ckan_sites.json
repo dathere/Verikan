@@ -36,6 +36,39 @@
       ],
       "added_by": "default",
       "added_at": "2026-05-08T06:03:07.320636Z"
+    },
+    {
+      "id": "data-pa-gov",
+      "portal_type": "dcat",
+      "url": "https://data.pa.gov",
+      "catalog_url": "https://data.pa.gov/data.json",
+      "name": "Pennsylvania Open Data Portal (data.pa.gov)",
+      "organization": null,
+      "description": "Commonwealth of Pennsylvania statewide open data portal. Publishes a DCAT-US catalog of 470+ state agency datasets covering health and human services (drug overdose deaths, opioid hospitalizations, COVID-19), education, labor and industry, transportation (PennDOT), agriculture, environment, corrections, and state government spending \u2014 most with county-level breakdowns.",
+      "quality_score": 0.85,
+      "keywords": [
+        "pennsylvania",
+        "pa",
+        "commonwealth",
+        "statewide",
+        "state agency",
+        "opioid",
+        "overdose",
+        "health",
+        "penndot",
+        "transportation",
+        "education",
+        "labor",
+        "corrections",
+        "agriculture"
+      ],
+      "added_by": "default",
+      "added_at": "2026-09-04T04:12:21.463211Z"
     }
+  ],
+  "seeded_defaults": [
+    "ckan",
+    "data-pa-gov",
+    "wprdc"
   ]
 }

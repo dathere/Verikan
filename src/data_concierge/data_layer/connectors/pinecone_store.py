@@ -120,26 +120,55 @@ class PineconeVectorStore:
             return obj.get(field_name, default)
         return default
 
+    def portal_filter(self, site_id: str | None) -> dict[str, Any] | None:
+        """Metadata filter restricting a search to one portal's records.
+
+        One namespace holds every portal's records, so an unscoped search
+        returns another portal's resource IDs — which then 404 when the agent
+        tries to load them against the portal it is actually querying.
+
+        Records written before per-portal tagging carry no ``site_id`` at all.
+        Rather than backfilling them (a one-way write over a live corpus), the
+        portal that owns them — ``settings.pinecone_legacy_site_id`` — also
+        matches untagged records. Every other portal matches strictly, so a
+        newly indexed portal can never pick them up.
+        """
+        if not site_id:
+            return None
+        legacy = getattr(settings, "pinecone_legacy_site_id", "ckan")
+        if site_id == legacy:
+            return {
+                "$or": [
+                    {"site_id": {"$eq": site_id}},
+                    {"site_id": {"$exists": False}},
+                ]
+            }
+        return {"site_id": {"$eq": site_id}}
+
     def search_resources(
         self,
         query: str,
         n_results: int = 10,
         filters: dict[str, Any] | None = None,
+        site_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Search for CKAN resources using semantic similarity.
+        """Search for portal resources using semantic similarity.
 
         Args:
             query: Search query
             n_results: Maximum number of results
             filters: Optional metadata filters
+            site_id: Restrict results to one portal (see :meth:`portal_filter`).
+                Leaving this ``None`` searches every portal in the namespace.
 
         Returns:
             List of matching resources with metadata
         """
-        self.logger.info(f"Vector search: '{query}' (max: {n_results})")
+        self.logger.info(f"Vector search: '{query}' (max: {n_results}, site: {site_id})")
 
-        # Check cache
-        cache_key = f"{query}_{n_results}_{filters}"
+        # Check cache — the site scope is part of the key, or a scoped and an
+        # unscoped search for the same text would share an entry.
+        cache_key = f"{query}_{n_results}_{filters}_{site_id}"
         with self.cache_lock:
             if cache_key in self.query_cache:
                 self.logger.info("Using cached search results")
@@ -148,16 +177,19 @@ class PineconeVectorStore:
         # Try Pinecone search
         if self.use_pinecone and self.index:
             try:
-                results = self._pinecone_search(query, n_results, filters)
-                if results:
-                    with self.cache_lock:
-                        self.query_cache[cache_key] = results
-                        if len(self.query_cache) > 100:
-                            # Prune old entries
-                            keys = list(self.query_cache.keys())[:20]
-                            for k in keys:
-                                del self.query_cache[k]
-                    return results
+                results = self._pinecone_search(query, n_results, filters, site_id)
+                # Return even an EMPTY result: Pinecone answered, and "this
+                # portal has nothing indexed" is a real answer. Falling through
+                # to the fallback here logged "Pinecone unavailable" for a
+                # perfectly healthy scoped search that simply had no matches.
+                with self.cache_lock:
+                    self.query_cache[cache_key] = results
+                    if len(self.query_cache) > 100:
+                        # Prune old entries
+                        keys = list(self.query_cache.keys())[:20]
+                        for k in keys:
+                            del self.query_cache[k]
+                return results
             except Exception as e:
                 self.logger.error(f"Pinecone search failed: {e}")
 
@@ -172,10 +204,11 @@ class PineconeVectorStore:
         query: str,
         n_results: int,
         filters: dict[str, Any] | None,
+        site_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Execute search using Pinecone's integrated embeddings."""
         # Build metadata filter
-        filter_dict = {}
+        filter_dict: dict[str, Any] = {}
         if filters:
             if filters.get("has_temporal"):
                 filter_dict["has_temporal"] = True
@@ -201,11 +234,20 @@ class PineconeVectorStore:
                 "format", "record_count", "column_count",
                 "ai_tags", "has_temporal", "has_geographic", "has_demographic",
                 "has_financial", "temporal_min", "temporal_max",
-                "text", "description",
+                "text", "description", "site_id",
             ],
         }
 
-        if filter_dict:
+        # Portal scoping is applied server-side. It cannot be done after the
+        # fact: `fields` below determines what the server returns, so a
+        # client-side drop would be filtering on data it never received — and
+        # top_k would already have been filled with the wrong portal's records.
+        scope = self.portal_filter(site_id)
+        if scope and filter_dict:
+            search_params["filter"] = {"$and": [scope, filter_dict]}
+        elif scope:
+            search_params["filter"] = scope
+        elif filter_dict:
             search_params["filter"] = filter_dict
 
         results = self.index.search(**search_params)
@@ -250,6 +292,7 @@ class PineconeVectorStore:
                         'has_financial': bool(fields.get('has_financial', False)),
                         'ai_tags': fields.get('ai_tags', ''),
                         'description': fields.get('description', ''),
+                        'site_id': fields.get('site_id', ''),
                         'temporal_coverage': self._extract_temporal_coverage(fields),
                     }
 
@@ -381,6 +424,136 @@ class PineconeVectorStore:
                 "error": str(e),
                 "using_pinecone": self.use_pinecone,
             }
+
+    @staticmethod
+    def _is_rate_limited(exc: Exception) -> bool:
+        """True when an upsert failed because the embedding quota was hit.
+
+        Integrated-embedding indexes embed server-side, so a batch is billed
+        against a per-minute token quota for the embedding model
+        (llama-text-embed-v2: 250k tokens/minute). Onboarding a whole portal
+        sends far more than that, and it comes back as a generic 429 rather
+        than anything upsert-specific.
+        """
+        text = str(exc)
+        return "429" in text or "RESOURCE_EXHAUSTED" in text or "rate limit" in text.lower()
+
+    def upsert_records(
+        self,
+        records: list[dict[str, Any]],
+        *,
+        namespace: str | None = None,
+        batch_size: int = 40,
+        max_retries: int = 5,
+    ) -> dict[str, Any]:
+        """Upsert records into the index, embedding them server-side.
+
+        The indexes this store targets are **integrated-embedding** indexes:
+        the embedding model lives in the index (``llama-text-embed-v2`` on a
+        semantic field named ``text``), so records are sent as plain
+        dictionaries and Pinecone embeds them. That is why this uses
+        ``upsert_records`` rather than ``upsert`` — the latter expects vectors
+        we would have to produce ourselves, with a model that must match the
+        index's exactly.
+
+        Each record needs an ``_id`` and the ``text`` field that gets embedded;
+        every other key is stored alongside and is filterable/returnable.
+
+        Returns a summary with ``upserted``, ``failed``, and any ``errors``;
+        a failing batch does not abort the rest, so one oversized record
+        cannot cost an entire onboarding run.
+
+        Rate limiting is retried rather than reported: the embedding quota is
+        per *minute*, so a portal-sized upload hits it partway through, and
+        treating that as a permanent failure silently drops most of the corpus
+        (a real WPRDC run lost 90 of 110 records this way). A 429 backs off and
+        retries the same batch; any other error is recorded and the run moves on.
+        """
+        import random
+        import time as _time
+
+        if not self.use_pinecone or not self.index:
+            return {
+                "upserted": 0,
+                "failed": len(records),
+                "errors": ["Pinecone is not configured (no API key, or index not found)"],
+            }
+
+        target_ns = namespace or self.namespace
+        upserted = 0
+        failed = 0
+        errors: list[str] = []
+
+        for start in range(0, len(records), batch_size):
+            batch = records[start : start + batch_size]
+            missing = [r for r in batch if not r.get("_id") or not r.get("text")]
+            if missing:
+                failed += len(missing)
+                errors.append(
+                    f"{len(missing)} record(s) in batch at offset {start} lack _id or text"
+                )
+                batch = [r for r in batch if r.get("_id") and r.get("text")]
+                if not batch:
+                    continue
+            for attempt in range(max_retries + 1):
+                try:
+                    # Keyword args, not positional: the SDK made this method
+                    # keyword-only in v10, and the parameter names are unchanged
+                    # back to v5 — so this call works across the pinned range.
+                    self.index.upsert_records(namespace=target_ns, records=batch)
+                    upserted += len(batch)
+                    self.logger.info(
+                        "Upserted records to Pinecone",
+                        count=len(batch),
+                        namespace=target_ns,
+                        offset=start,
+                    )
+                    break
+                except Exception as e:
+                    if self._is_rate_limited(e) and attempt < max_retries:
+                        # The quota window is a minute, so back off toward it
+                        # rather than hammering: 15s, 30s, 60s, 60s... with
+                        # jitter so concurrent uploads do not resynchronise.
+                        delay = min(15 * (2**attempt), 60) + random.uniform(0, 5)
+                        self.logger.warning(
+                            "Pinecone embedding quota hit; backing off",
+                            offset=start,
+                            attempt=attempt + 1,
+                            delay_seconds=round(delay, 1),
+                        )
+                        _time.sleep(delay)
+                        continue
+                    failed += len(batch)
+                    errors.append(f"batch at offset {start}: {e}")
+                    self.logger.error(
+                        "Pinecone upsert failed", offset=start, error=str(e)
+                    )
+                    break
+
+        # Newly written records invalidate cached query answers.
+        if upserted:
+            self.clear_cache()
+
+        return {
+            "upserted": upserted,
+            "failed": failed,
+            "errors": errors,
+            "namespace": target_ns,
+            "index_name": self.index_name,
+        }
+
+    def delete_records(self, ids: list[str], *, namespace: str | None = None) -> int:
+        """Delete records by ID.  Returns the number requested for deletion."""
+        if not self.use_pinecone or not self.index or not ids:
+            return 0
+        target_ns = namespace or self.namespace
+        try:
+            self.index.delete(ids=ids, namespace=target_ns)
+            self.clear_cache()
+            return len(ids)
+        except Exception as e:
+            self.logger.error("Pinecone delete failed", error=str(e))
+            return 0
 
     def clear_cache(self) -> None:
         """Clear the query cache."""

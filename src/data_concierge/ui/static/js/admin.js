@@ -109,7 +109,10 @@ function setupEventListeners() {
     });
 
     // CKAN Sites tab
-    document.getElementById('ckansites-tab').addEventListener('shown.bs.tab', loadCkanSites);
+    document.getElementById('ckansites-tab').addEventListener('shown.bs.tab', () => {
+        loadCkanSites();
+        loadOnboardingJobs();
+    });
     document.getElementById('ckanAddSiteBtn').addEventListener('click', addCkanSite);
     const ckanQualityInput = document.getElementById('ckanSiteQuality');
     if (ckanQualityInput) {
@@ -117,6 +120,23 @@ function setupEventListeners() {
             document.getElementById('ckanSiteQualityValue').textContent =
                 parseFloat(e.target.value).toFixed(2);
         });
+    }
+
+    const ckanTypeInput = document.getElementById('ckanSiteType');
+    if (ckanTypeInput) {
+        ckanTypeInput.addEventListener('change', syncCkanSiteTypeFields);
+        syncCkanSiteTypeFields();
+    }
+
+    // Onboarding runs
+    document.getElementById('onboardStartBtn')?.addEventListener('click', startOnboardingRun);
+    document.getElementById('onboardRefreshBtn')?.addEventListener('click', loadOnboardingJobs);
+    document.getElementById('onboardLogCloseBtn')?.addEventListener('click', closeOnboardingLog);
+    document.getElementById('onboardCancelBtn')?.addEventListener('click', cancelOnboardingJob);
+    const pineconeToggle = document.getElementById('onboardPinecone');
+    if (pineconeToggle) {
+        pineconeToggle.addEventListener('change', syncOnboardPineconeFields);
+        syncOnboardPineconeFields();
     }
 
     // Approved members tab
@@ -1445,7 +1465,7 @@ let _spTarget = 'ckan';
 
 // Valid editor targets — each maps to `{base}_template` / `{base}_placeholders`
 // / `{base}_is_custom` keys in the /settings/system-prompt payload.
-const _SP_TARGETS = ['ckan', 'mcp', 'notebook_header', 'notebook_results', 'notebook_review'];
+const _SP_TARGETS = ['ckan', 'dcat', 'mcp', 'notebook_header', 'notebook_results', 'notebook_review'];
 
 function _spBase() { return _SP_TARGETS.includes(_spTarget) ? _spTarget : 'ckan'; }
 function _spKey() { return _spBase() + '_template'; }
@@ -2049,7 +2069,7 @@ function sourceBadge(src) {
 }
 
 // =============================================================================
-// Notebook Reviews (execution + adversarial method review)
+// Notebook Reviews (verification + adversarial roborev-style review)
 // =============================================================================
 
 let _nbReviewsCache = [];
@@ -2637,14 +2657,16 @@ async function loadCkanSites() {
             container.innerHTML = `
                 <div class="col-12 text-center text-muted py-5">
                     <i class="bi bi-globe display-4"></i>
-                    <p class="mt-3 mb-1">No CKAN sites registered yet</p>
-                    <p class="small">Add a CKAN portal so the agent can search it when answering questions.</p>
+                    <p class="mt-3 mb-1">No data portals registered yet</p>
+                    <p class="small">Add a CKAN or DCAT portal so the agent can search it when answering questions.</p>
                 </div>
             `;
             return;
         }
         container.innerHTML = data.sites.map(s => renderCkanSiteCard(s)).join('');
         bindClick(container, '.js-ckan-remove', (el) => removeCkanSite(el.dataset.siteId));
+        bindClick(container, '.js-ckan-onboard', (el) => openOnboardModal(
+            el.dataset.siteId, el.dataset.siteName, el.dataset.portalType));
     } catch (error) {
         container.innerHTML = `
             <div class="col-12">
@@ -2668,6 +2690,15 @@ function renderCkanSiteCard(site) {
         ? `<span class="badge bg-info text-dark"><i class="bi bi-building me-1"></i>${escapeHtml(site.organization)}</span>`
         : '';
     const isDefault = site.added_by === 'default';
+    // Portal type drives which tools work against this site, so it is shown
+    // on the card rather than hidden behind an edit form.
+    const portalType = (site.portal_type === 'dcat') ? 'dcat' : 'ckan';
+    const typeBadge = portalType === 'dcat'
+        ? '<span class="badge bg-primary"><i class="bi bi-journal-text me-1"></i>DCAT catalog</span>'
+        : '<span class="badge bg-success"><i class="bi bi-hdd-network me-1"></i>CKAN API</span>';
+    const catalogLine = (portalType === 'dcat' && site.catalog_url)
+        ? `<p class="small text-muted mb-1"><i class="bi bi-file-earmark-code me-1"></i>Catalog: ${escapeHtml(site.catalog_url)}</p>`
+        : '';
     return `
         <div class="col-12">
             <div class="mcp-server-card">
@@ -2676,6 +2707,7 @@ function renderCkanSiteCard(site) {
                         <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
                             <h6 class="mb-0">${escapeHtml(site.name)}</h6>
                             <span class="badge bg-secondary"><i class="bi bi-hash me-1"></i>${idSafe}</span>
+                            ${typeBadge}
                             ${orgBadge}
                             ${isDefault ? '<span class="badge bg-secondary border">built-in</span>' : ''}
                         </div>
@@ -2685,6 +2717,7 @@ function renderCkanSiteCard(site) {
                                 <i class="bi bi-globe me-1"></i>${escapeHtml(site.url)}
                             </a>
                         </p>
+                        ${catalogLine}
                         ${site.description
                             ? `<p class="text-muted mb-2 small">${escapeHtml(site.description)}</p>`
                             : ''}
@@ -2695,6 +2728,12 @@ function renderCkanSiteCard(site) {
                         </p>
                     </div>
                     <div class="d-flex gap-2 ms-3 flex-shrink-0">
+                        <button class="btn btn-sm btn-outline-primary js-ckan-onboard"
+                                data-site-id="${idSafe}" data-portal-type="${portalType}"
+                                data-site-name="${escapeHtml(site.name || '')}"
+                                title="Download and profile this portal's datasets">
+                            <i class="bi bi-database-down me-1"></i>Onboard
+                        </button>
                         <button class="btn btn-sm btn-outline-danger js-ckan-remove"
                                 data-site-id="${idSafe}" title="Remove site">
                             <i class="bi bi-trash"></i>
@@ -2714,6 +2753,8 @@ async function addCkanSite() {
         return;
     }
     const siteId = document.getElementById('ckanSiteId').value.trim();
+    const portalType = document.getElementById('ckanSiteType').value === 'dcat' ? 'dcat' : 'ckan';
+    const catalogUrl = document.getElementById('ckanSiteCatalogUrl').value.trim();
     const organization = document.getElementById('ckanSiteOrg').value.trim();
     const description = document.getElementById('ckanSiteDescription').value.trim();
     const keywordsRaw = document.getElementById('ckanSiteKeywords').value;
@@ -2726,12 +2767,16 @@ async function addCkanSite() {
     const payload = {
         name,
         url,
+        portal_type: portalType,
         organization: organization || null,
         description,
         keywords,
         quality_score: Number.isFinite(quality) ? quality : 0.85,
     };
     if (siteId) payload.site_id = siteId;
+    // Catalog URL is DCAT-only; sending it for a CKAN portal would persist a
+    // field that nothing reads.
+    if (portalType === 'dcat' && catalogUrl) payload.catalog_url = catalogUrl;
 
     try {
         const response = await adminFetch(CKAN_SITES_API, {
@@ -2740,29 +2785,287 @@ async function addCkanSite() {
             body: JSON.stringify(payload),
         });
         const data = await response.json();
-        showToast(data.message || 'CKAN site added', 'success');
+        showToast(data.message || 'Portal added', 'success');
         document.getElementById('addCkanSiteForm').reset();
         document.getElementById('ckanSiteQualityValue').textContent = '0.85';
+        syncCkanSiteTypeFields();
         bootstrap.Modal.getInstance(document.getElementById('addCkanSiteModal'))?.hide();
         loadCkanSites();
     } catch (error) {
-        showToast(`Failed to add CKAN site: ${error.message}`, 'danger');
+        showToast(`Failed to add portal: ${error.message}`, 'danger');
     }
 }
 
+// Show only the fields that apply to the selected portal type: a CKAN
+// organization filter is meaningless for a DCAT catalog, and a catalog URL is
+// meaningless for a CKAN action API.
+function syncCkanSiteTypeFields() {
+    const typeEl = document.getElementById('ckanSiteType');
+    if (!typeEl) return;
+    const isDcat = typeEl.value === 'dcat';
+    const catalogWrap = document.getElementById('ckanSiteCatalogWrap');
+    const orgWrap = document.getElementById('ckanSiteOrgWrap');
+    if (catalogWrap) catalogWrap.classList.toggle('d-none', !isDcat);
+    if (orgWrap) orgWrap.classList.toggle('d-none', isDcat);
+}
+
 async function removeCkanSite(siteId) {
-    if (!confirm(`Remove CKAN site "${siteId}"?\n\nThe agent will stop searching this portal for new queries.`)) {
+    if (!confirm(`Remove portal "${siteId}"?\n\nThe agent will stop searching this portal for new queries.`)) {
         return;
     }
     try {
         await adminFetch(`${CKAN_SITES_API}/${encodeURIComponent(siteId)}`, { method: 'DELETE' });
-        showToast(`CKAN site "${siteId}" removed`, 'success');
+        showToast(`Portal "${siteId}" removed`, 'success');
         loadCkanSites();
     } catch (error) {
-        showToast(`Failed to remove CKAN site: ${error.message}`, 'danger');
+        showToast(`Failed to remove portal: ${error.message}`, 'danger');
     }
 }
 
 // These handlers are wired up via bindClick() (data-* attributes +
 // addEventListener) rather than inline onclick, so they no longer need to be
 // exposed on the global window object.
+
+// =============================================================================
+// Portal Onboarding Runs
+// =============================================================================
+// A run is a supervised child process on the server (gateway/onboarding_jobs).
+// The UI starts one, lists recent runs, and tails the running job's log by
+// polling with an increasing offset so each poll returns only new lines.
+
+const ONBOARD_API = `${API_BASE}/admin/onboarding-jobs`;
+
+let _onboardSiteId = null;
+let _onboardLogJobId = null;
+let _onboardLogOffset = 0;
+let _onboardPollTimer = null;
+
+function openOnboardModal(siteId, siteName, portalType) {
+    _onboardSiteId = siteId;
+    const isDcat = portalType === 'dcat';
+    document.getElementById('onboardRunTarget').innerHTML =
+        `Portal <strong>${escapeHtml(siteName || siteId)}</strong> ` +
+        `(<code>${escapeHtml(siteId)}</code>, ${isDcat ? 'DCAT catalog' : 'CKAN API'})`;
+    // --limit and --max-mb exist only on the DCAT script; showing them for a
+    // CKAN portal would offer options the run cannot honour.
+    document.querySelectorAll('.onboard-dcat-only').forEach(el => {
+        el.classList.toggle('d-none', !isDcat);
+    });
+    // getOrCreateInstance, not `new`: constructing a second Modal for the same
+    // element orphans the first one's backdrop, which leaves the page dimmed
+    // and unscrollable after the modal is dismissed.
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('onboardRunModal')).show();
+}
+
+function syncOnboardPineconeFields() {
+    const on = document.getElementById('onboardPinecone')?.checked;
+    document.getElementById('onboardPineconeOptions')?.classList.toggle('d-none', !on);
+}
+
+async function startOnboardingRun() {
+    if (!_onboardSiteId) return;
+    const num = (id) => {
+        const raw = document.getElementById(id)?.value;
+        if (raw === '' || raw === null || raw === undefined) return null;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : null;
+    };
+    const text = (id) => (document.getElementById(id)?.value || '').trim() || null;
+
+    const payload = {
+        site_id: _onboardSiteId,
+        skip_qsv: document.getElementById('onboardSkipQsv').checked,
+        skip_download: document.getElementById('onboardSkipDownload').checked,
+        rebuild_index: document.getElementById('onboardRebuildIndex').checked,
+        no_sync: document.getElementById('onboardNoSync').checked,
+        dataset_filter: text('onboardDatasetFilter'),
+        limit: num('onboardLimit'),
+        concurrency: num('onboardConcurrency'),
+        max_mb: num('onboardMaxMb'),
+        pinecone: document.getElementById('onboardPinecone').checked,
+        pinecone_dry_run: document.getElementById('onboardPineconeDryRun').checked,
+        pinecone_namespace: text('onboardPineconeNamespace'),
+        pinecone_index: text('onboardPineconeIndex'),
+    };
+
+    const btn = document.getElementById('onboardStartBtn');
+    btn.disabled = true;
+    try {
+        const response = await adminFetch(ONBOARD_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        showToast(data.message || 'Onboarding run started', 'success');
+        bootstrap.Modal.getInstance(document.getElementById('onboardRunModal'))?.hide();
+        await loadOnboardingJobs();
+        if (data.job?.id) watchOnboardingJob(data.job.id);
+    } catch (error) {
+        showToast(`Could not start the run: ${error.message}`, 'danger');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function onboardStatusBadge(status) {
+    const map = {
+        running: ['primary', 'arrow-repeat', 'Running'],
+        succeeded: ['success', 'check-circle', 'Succeeded'],
+        failed: ['danger', 'x-circle', 'Failed'],
+        cancelled: ['secondary', 'slash-circle', 'Cancelled'],
+    };
+    const [colour, icon, label] = map[status] || ['secondary', 'question-circle', status || 'unknown'];
+    return `<span class="badge bg-${colour}"><i class="bi bi-${icon} me-1"></i>${escapeHtml(label)}</span>`;
+}
+
+function _onboardDuration(job) {
+    if (!job.started_at) return '';
+    const start = new Date(job.started_at);
+    const end = job.finished_at ? new Date(job.finished_at) : new Date();
+    const secs = Math.max(0, Math.round((end - start) / 1000));
+    if (secs < 60) return `${secs}s`;
+    if (secs < 3600) return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+    return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+}
+
+async function loadOnboardingJobs() {
+    const container = document.getElementById('onboardJobList');
+    if (!container) return;
+    try {
+        const response = await adminFetch(ONBOARD_API);
+        const data = await response.json();
+
+        const warnBox = document.getElementById('onboardWarnings');
+        if (warnBox) {
+            warnBox.innerHTML = (data.warnings || []).map(w =>
+                `<div class="alert alert-warning py-2 small mb-2">
+                    <i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(w)}
+                 </div>`).join('');
+        }
+
+        if (!data.jobs || data.jobs.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state text-muted small py-4">
+                    No onboarding runs yet. Use a portal's <strong>Onboard</strong> button to start one.
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Portal</th><th>Status</th><th>Started</th>
+                            <th>Duration</th><th>Started by</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.jobs.map(job => `
+                            <tr>
+                                <td>
+                                    <div>${escapeHtml(job.site_name || job.site_id || '')}</div>
+                                    <code class="small text-muted">${escapeHtml(job.script || '')}</code>
+                                </td>
+                                <td>${onboardStatusBadge(job.status)}
+                                    ${job.error ? `<div class="small text-danger">${escapeHtml(job.error)}</div>` : ''}
+                                </td>
+                                <td class="small">${job.started_at ? escapeHtml(new Date(job.started_at).toLocaleString()) : ''}</td>
+                                <td class="small">${escapeHtml(_onboardDuration(job))}</td>
+                                <td class="small">${escapeHtml(job.started_by || '')}</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-secondary js-onboard-log"
+                                            data-job-id="${escapeHtml(job.id)}">
+                                        <i class="bi bi-terminal me-1"></i>Log
+                                    </button>
+                                </td>
+                            </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        bindClick(container, '.js-onboard-log', (el) => watchOnboardingJob(el.dataset.jobId));
+    } catch (error) {
+        container.innerHTML =
+            `<div class="alert alert-danger">Failed to load onboarding runs: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+function stopOnboardingPoll() {
+    if (_onboardPollTimer) {
+        clearTimeout(_onboardPollTimer);
+        _onboardPollTimer = null;
+    }
+}
+
+function closeOnboardingLog() {
+    stopOnboardingPoll();
+    _onboardLogJobId = null;
+    document.getElementById('onboardLogPanel')?.classList.add('d-none');
+}
+
+function watchOnboardingJob(jobId) {
+    // Switching jobs restarts the tail from the beginning of the retained log.
+    if (_onboardLogJobId !== jobId) {
+        _onboardLogOffset = 0;
+        document.getElementById('onboardLog').textContent = '';
+    }
+    _onboardLogJobId = jobId;
+    document.getElementById('onboardLogPanel').classList.remove('d-none');
+    document.getElementById('onboardLogTitle').textContent = `Job ${jobId}`;
+    stopOnboardingPoll();
+    pollOnboardingLog();
+}
+
+async function pollOnboardingLog() {
+    const jobId = _onboardLogJobId;
+    if (!jobId) return;
+    try {
+        const response = await adminFetch(`${ONBOARD_API}/${encodeURIComponent(jobId)}?log_offset=${_onboardLogOffset}`);
+        const { job } = await response.json();
+
+        const pre = document.getElementById('onboardLog');
+        if (job.log && job.log.length) {
+            const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+            pre.textContent += job.log.join('\n') + '\n';
+            // Only auto-scroll when the operator is already at the bottom, so
+            // scrolling back to read something is not yanked away.
+            if (atBottom) pre.scrollTop = pre.scrollHeight;
+        }
+        _onboardLogOffset = job.log_next_offset ?? _onboardLogOffset;
+
+        document.getElementById('onboardLogStatus').innerHTML =
+            onboardStatusBadge(job.status) +
+            (job.exit_code !== null && job.exit_code !== undefined
+                ? ` <span class="small text-muted ms-1">exit ${escapeHtml(String(job.exit_code))}</span>` : '');
+
+        const isRunning = job.status === 'running';
+        document.getElementById('onboardCancelBtn').classList.toggle('d-none', !isRunning);
+
+        if (isRunning) {
+            _onboardPollTimer = setTimeout(pollOnboardingLog, 2000);
+        } else {
+            stopOnboardingPoll();
+            loadOnboardingJobs();
+        }
+    } catch (error) {
+        stopOnboardingPoll();
+        document.getElementById('onboardLogStatus').innerHTML =
+            `<span class="text-danger small">Lost contact: ${escapeHtml(error.message)}</span>`;
+    }
+}
+
+async function cancelOnboardingJob() {
+    if (!_onboardLogJobId) return;
+    if (!confirm('Cancel this onboarding run?\n\nFiles already downloaded and profiled are kept; ' +
+                 'you can resume with "Reuse CSVs already on disk".')) {
+        return;
+    }
+    try {
+        await adminFetch(`${ONBOARD_API}/${encodeURIComponent(_onboardLogJobId)}/cancel`, { method: 'POST' });
+        showToast('Run cancelled', 'success');
+        pollOnboardingLog();
+    } catch (error) {
+        showToast(`Could not cancel: ${error.message}`, 'danger');
+    }
+}

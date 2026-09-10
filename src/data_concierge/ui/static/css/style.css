@@ -2047,3 +2047,29 @@ ol.steps { list-style: none; padding-left: 0; margin: 0 0 1rem; }
 @media (min-width: 2000px) {
     .message, .chat-input-container form { max-width: 1000px; }
 }
+
+/* Onboarding run log — a terminal-style tail of the child process's output.
+   Uses the shared surface tokens so it follows the light/dark theme rather
+   than hardcoding a console palette. */
+.onboarding-log {
+    background: var(--dc-surface-2);
+    color: var(--dc-text-secondary);
+    border: 1px solid var(--dc-border);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    margin: 0;
+    max-height: 420px;
+    overflow-y: auto;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    white-space: pre;
+    tab-size: 4;
+}
+
+.onboarding-log:empty::before {
+    content: "Waiting for output…";
+    color: var(--dc-text-muted);
+    font-style: italic;
+}

@@ -108,7 +108,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # The agent_log is the raw evidence record behind every published answer and
 # notebook. It follows the civic-ai-tools evidence standards
-# (typedstandards.org): verbatim content, complete
+# (docs/publish-evidence.md / typedstandards.org): verbatim content, complete
 # token accounting (including cache tokens), per-tool-call source and
 # operationType, accurate model attribution, and wall-clock timestamps.
 AGENT_LOG_FORMAT_VERSION = 2
@@ -254,6 +254,54 @@ def _all_portal_configs() -> dict[str, dict[str, Any]]:
         logger.warning("Failed to load CKAN sites registry", error=str(exc))
     configs.update(_STATIC_PORTAL_CONFIGS)
     return configs
+
+
+# Portal-type resolution
+# ----------------------
+# Tool dispatch carries a resolved portal *URL* (a ``portal_id`` override is
+# turned into a URL before the tool runs), so these recover which access
+# mechanism that URL belongs to.  Both fail closed to CKAN: an unregistered or
+# unreachable registry must not change how existing portals are queried.
+_PORTAL_TYPE_DCAT = "dcat"
+_PORTAL_TYPE_CKAN = "ckan"
+
+
+def _normalize_portal_type(raw: Any) -> str:
+    value = str(raw or "").strip().lower()
+    return value if value in (_PORTAL_TYPE_CKAN, _PORTAL_TYPE_DCAT) else _PORTAL_TYPE_CKAN
+
+
+def _portal_type_for_url(portal_url: str) -> str:
+    """Return the registered portal type for ``portal_url`` (CKAN if unknown)."""
+    try:
+        from data_concierge.gateway import ckan_sites
+
+        return _normalize_portal_type(ckan_sites.portal_type_for_url(portal_url))
+    except Exception as exc:  # pragma: no cover - registry failures are non-fatal
+        logger.warning("Portal type lookup failed", url=portal_url, error=str(exc))
+        return _PORTAL_TYPE_CKAN
+
+
+def _site_id_for_url(portal_url: str) -> str | None:
+    """Return the registry ID of the portal at ``portal_url``, if registered."""
+    try:
+        from data_concierge.gateway import ckan_sites
+
+        site = ckan_sites.find_site_by_url(portal_url)
+        return str(site["id"]) if site and site.get("id") else None
+    except Exception:  # pragma: no cover - registry failures are non-fatal
+        return None
+
+
+def _catalog_url_for_url(portal_url: str) -> str | None:
+    """Return the explicit DCAT catalog URL registered for ``portal_url``, if any."""
+    try:
+        from data_concierge.gateway import ckan_sites
+
+        site = ckan_sites.find_site_by_url(portal_url)
+        return (site or {}).get("catalog_url") or None
+    except Exception:  # pragma: no cover
+        return None
 
 
 # Backwards-compatible alias — some callers still import PORTAL_CONFIGS.
@@ -448,6 +496,7 @@ class LLMAnalysisAgent(BaseAgent):
         super().__init__()
         self._anthropic: Any = None
         self._http_clients: dict[str, httpx.AsyncClient] = {}
+        self._dcat_clients: dict[str, Any] = {}  # portal_url -> DCATClient
         self._pinecone_store: Any = None  # lazy-init on first semantic search
         # Register so the FastAPI lifespan shutdown can drain our per-portal
         # CKAN connection pools (issue #96).
@@ -462,6 +511,14 @@ class LLMAnalysisAgent(BaseAgent):
         for client in clients:
             try:
                 await client.aclose()
+            except Exception:  # noqa: BLE001 - best-effort cleanup
+                pass
+
+        dcat_clients = list(self._dcat_clients.values())
+        self._dcat_clients.clear()
+        for dcat_client in dcat_clients:
+            try:
+                await dcat_client.close()
             except Exception:  # noqa: BLE001 - best-effort cleanup
                 pass
 
@@ -549,12 +606,95 @@ class LLMAnalysisAgent(BaseAgent):
             self.logger.warning("Custom MCP prompt failed to render; using default", error=str(e))
             return DEFAULT_MCP_TEMPLATE.format(**fields)
 
+    def _build_other_portals_block(self, primary_id: str | None) -> str:
+        """List the other registered portals the agent can reach via ``portal_id``.
+
+        Each line carries the portal's type, because the two behave differently:
+        a CKAN portal answers SQL, a DCAT portal does not.  Without the label
+        the model reaches for ``run_sql_query`` on a catalog portal and burns a
+        turn on a guaranteed failure.
+        """
+        ckan_lines: list[str] = []
+        dcat_lines: list[str] = []
+        try:
+            from data_concierge.gateway import ckan_sites
+
+            for site in ckan_sites.list_sites():
+                sid = site.get("id")
+                if not sid or sid == primary_id:
+                    continue
+                name = site.get("name", sid)
+                descr = (site.get("description") or "").strip()
+                line = f"- **{sid}** — {name}: {descr[:200]}"
+                if _normalize_portal_type(site.get("portal_type")) == _PORTAL_TYPE_DCAT:
+                    dcat_lines.append(line)
+                else:
+                    ckan_lines.append(line)
+        except Exception:
+            return ""
+
+        if not ckan_lines and not dcat_lines:
+            return ""
+
+        parts = [
+            "\n## Other portals available\n"
+            "If the primary portal doesn't have relevant data, you may search "
+            "these other registered portals by passing the listed `portal_id` "
+            "to any tool call.\n"
+        ]
+        if ckan_lines:
+            parts.append(
+                "\n**CKAN portals** (full tool set, including `run_sql_query`):\n"
+                + "\n".join(ckan_lines)
+                + "\n"
+            )
+        if dcat_lines:
+            parts.append(
+                "\n**DCAT catalog portals** — use `search_datasets`, "
+                "`get_dataset_info`, and `load_resource_data` only. These "
+                "publish downloadable files, not a queryable database, so "
+                "`run_sql_query` does NOT work on them; load rows and "
+                "aggregate in pandas instead. A truncated load is the first "
+                "slice of a file, never the whole dataset:\n"
+                + "\n".join(dcat_lines)
+                + "\n"
+            )
+        return "".join(parts)
+
+    def _build_dcat_system_prompt(
+        self, portal_cfg: dict[str, Any], primary_id: str | None = None
+    ) -> str:
+        """Build the system prompt for a DCAT-catalog primary portal."""
+        from data_concierge.gateway.system_prompt import (
+            DEFAULT_DCAT_TEMPLATE,
+            get_dcat_template,
+        )
+
+        fields = {
+            "portal_name": portal_cfg["name"],
+            "portal_url": portal_cfg["url"],
+            "description": portal_cfg.get("description", ""),
+            "other_portals_block": self._build_other_portals_block(primary_id),
+        }
+        try:
+            return get_dcat_template().format(**fields)
+        except (KeyError, IndexError, ValueError) as e:
+            self.logger.warning(
+                "Custom DCAT prompt failed to render; using default", error=str(e)
+            )
+            return DEFAULT_DCAT_TEMPLATE.format(**fields)
+
     def _build_system_prompt(
         self, portal_cfg: dict[str, Any], primary_id: str | None = None
     ) -> str:
         # MCP-backed sources use a focused prompt — no CKAN-specific instructions
         if primary_id and primary_id in _STATIC_PORTAL_CONFIGS:
             return self._build_mcp_system_prompt(portal_cfg)
+
+        # A DCAT catalog has no action API and no SQL, so the CKAN prompt would
+        # instruct the model to call tools that cannot work there.
+        if _normalize_portal_type(portal_cfg.get("portal_type")) == _PORTAL_TYPE_DCAT:
+            return self._build_dcat_system_prompt(portal_cfg, primary_id)
 
         portal_name = portal_cfg["name"]
         portal_url = portal_cfg["url"]
@@ -572,28 +712,7 @@ class LLMAnalysisAgent(BaseAgent):
         # is what lets the agent "check other CKAN sites before answering":
         # when the primary portal has no relevant data, Claude can re-run
         # search_datasets against one of these alternatives.
-        other_lines: list[str] = []
-        try:
-            from data_concierge.gateway import ckan_sites
-
-            for site in ckan_sites.list_sites():
-                sid = site.get("id")
-                if not sid or sid == primary_id:
-                    continue
-                name = site.get("name", sid)
-                descr = (site.get("description") or "").strip()
-                other_lines.append(f"- **{sid}** — {name}: {descr[:200]}")
-        except Exception:
-            pass
-
-        other_portals_block = ""
-        if other_lines:
-            other_portals_block = (
-                "\n## Other CKAN portals available\n"
-                "If the primary portal doesn't have relevant data, you may "
-                "search these other registered CKAN sites by passing the listed "
-                "`portal_id` to any tool call:\n" + "\n".join(other_lines) + "\n"
-            )
+        other_portals_block = self._build_other_portals_block(primary_id)
 
         # The CKAN template is admin-editable (``gateway/system_prompt``). The
         # dynamic parts (portal name/URL, org filter, other portals) are passed
@@ -618,26 +737,64 @@ class LLMAnalysisAgent(BaseAgent):
 
     # -- tool execution ----------------------------------------------------
 
-    async def _execute_tool(self, tool_name: str, tool_input: dict, portal_url: str) -> str:
+    async def _execute_tool(
+        self,
+        tool_name: str,
+        tool_input: dict,
+        portal_url: str,
+        site_id: str | None = None,
+    ) -> str:
         # Allow Claude to override the target portal via ``portal_id`` so it
         # can fan out across admin-registered CKAN sites within one query.
         override_id = tool_input.pop("portal_id", None) if isinstance(tool_input, dict) else None
         effective_url = portal_url
+        effective_catalog_url: str | None = None
+        effective_type = _portal_type_for_url(portal_url)
+        # The portal's registry ID, not just its URL — semantic search is scoped
+        # by it so one portal's query cannot return another portal's resource
+        # IDs (which would 404 when the agent then tried to load them).
+        effective_site_id = site_id or _site_id_for_url(portal_url)
         if override_id:
             override_cfg = self.get_portal_config(override_id)
             override_url = override_cfg.get("url") if override_cfg else None
             if override_url:
                 effective_url = override_url
+                effective_type = _normalize_portal_type(override_cfg.get("portal_type"))
+                effective_catalog_url = override_cfg.get("catalog_url")
+                effective_site_id = str(override_id)
                 self.logger.info(
                     "Portal override",
                     tool=tool_name,
                     requested=override_id,
                     url=override_url,
+                    portal_type=effective_type,
                 )
+        if effective_catalog_url is None:
+            effective_catalog_url = _catalog_url_for_url(effective_url)
+
         try:
-            # Semantic search uses Pinecone, not the CKAN HTTP client
+            # Semantic search uses Pinecone, not a per-portal HTTP client
             if tool_name == "semantic_search_resources":
-                return await self._tool_semantic_search(tool_input)
+                return await self._tool_semantic_search(tool_input, effective_site_id)
+
+            # DCAT portals have no action API: the same three tool names are
+            # served from the catalog document instead (see connectors/dcat.py).
+            if effective_type == _PORTAL_TYPE_DCAT:
+                dcat = self._get_dcat_client(effective_url, effective_catalog_url)
+                if tool_name == "search_datasets":
+                    return await self._tool_dcat_search(dcat, tool_input)
+                if tool_name == "get_dataset_info":
+                    return await self._tool_dcat_dataset_info(dcat, tool_input)
+                if tool_name == "load_resource_data":
+                    return await self._tool_dcat_load(dcat, tool_input)
+                if tool_name == "run_sql_query":
+                    return (
+                        "Error: run_sql_query is not available on a DCAT portal — "
+                        "a DCAT catalog publishes downloadable files, not a queryable "
+                        "database. Use load_resource_data to pull rows, then filter "
+                        "and aggregate them in pandas."
+                    )
+                return f"Unknown tool: {tool_name}"
 
             client = await self._get_http_client(effective_url)
             if tool_name == "search_datasets":
@@ -655,8 +812,13 @@ class LLMAnalysisAgent(BaseAgent):
             logger.error("Tool error", tool=tool_name, error=str(exc))
             return f"Error: {exc}"
 
-    async def _tool_semantic_search(self, params: dict) -> str:
-        """Semantic search over pre-indexed CKAN resources via Pinecone."""
+    async def _tool_semantic_search(self, params: dict, site_id: str | None = None) -> str:
+        """Semantic search over pre-indexed portal resources via Pinecone.
+
+        Scoped to ``site_id``: the index is shared across portals, and an
+        unscoped search hands the model resource IDs from a portal it is not
+        querying.
+        """
         query = params.get("query", "")
         n_results = min(params.get("n_results", 10), 20)
 
@@ -676,13 +838,18 @@ class LLMAnalysisAgent(BaseAgent):
 
             loop = asyncio.get_running_loop()
             results = await loop.run_in_executor(
-                None, lambda: store.search_resources(query, n_results)
+                None, lambda: store.search_resources(query, n_results, site_id=site_id)
             )
         except Exception as exc:
             return f"Semantic search error: {exc}"
 
         if not results:
-            return f"No semantic matches for '{query}'. Try search_datasets with keywords."
+            scope = f" indexed for '{site_id}'" if site_id else ""
+            return (
+                f"No semantic matches for '{query}' among the resources{scope}. "
+                "This portal may not be indexed yet — use search_datasets, which "
+                "queries the portal's own live search."
+            )
 
         lines = [f"Found {len(results)} semantically matching resources for '{query}':\n"]
         for i, r in enumerate(results, 1):
@@ -706,6 +873,169 @@ class LLMAnalysisAgent(BaseAgent):
             if tc:
                 lines.append(f"   Coverage: {tc.get('min')} → {tc.get('max')}")
             lines.append("")
+        return "\n".join(lines)
+
+    # -- DCAT portal tools --------------------------------------------------
+    #
+    # These back the same three tool names as their CKAN counterparts, so the
+    # model needs no separate schema; only the mechanism differs.
+
+    def _get_dcat_client(self, portal_url: str, catalog_url: str | None = None) -> Any:
+        """Return a pooled DCAT client for ``portal_url``.
+
+        Pooled per portal so the parsed catalog (and its in-process cache) is
+        shared across every tool call in a run.
+        """
+        from data_concierge.data_layer.connectors.dcat import DCATClient
+
+        key = portal_url.rstrip("/")
+        client = self._dcat_clients.get(key)
+        if client is None:
+            client = DCATClient(key, catalog_url=catalog_url)
+            self._dcat_clients[key] = client
+        return client
+
+    async def _tool_dcat_search(self, dcat: Any, params: dict) -> str:
+        query = params.get("query", "")
+        rows = min(int(params.get("rows", 10) or 10), 20)
+
+        matches = await dcat.search_datasets(query, limit=rows)
+        if not matches:
+            catalog = await dcat.fetch_catalog()
+            return (
+                f"No datasets in {dcat.portal_url} match '{query}' "
+                f"(catalog has {len(catalog.datasets)} datasets). "
+                "Try broader or different keywords."
+            )
+
+        lines = [f"Found {len(matches)} datasets matching '{query}':\n"]
+        for i, (ds, score) in enumerate(matches, 1):
+            lines.append(f"{i}. **{ds.title}**")
+            lines.append(f"   Dataset ID: `{ds.id}`  (relevance {score:.2f})")
+            if ds.description:
+                lines.append(f"   {ds.description[:250]}")
+            if ds.keywords:
+                lines.append(f"   Keywords: {', '.join(ds.keywords[:10])}")
+            tabular = ds.tabular_distributions
+            lines.append(
+                f"   Modified: {ds.modified[:10] or '?'} | "
+                f"Distributions: {len(ds.distributions)} "
+                f"({len(tabular)} tabular)"
+            )
+            lines.append("")
+        lines.append(
+            "Call get_dataset_info with a Dataset ID to see its distributions, "
+            "then load_resource_data to pull rows."
+        )
+        return "\n".join(lines)
+
+    async def _tool_dcat_dataset_info(self, dcat: Any, params: dict) -> str:
+        dataset_id = params.get("dataset_id") or params.get("id") or ""
+        ds = await dcat.get_dataset(dataset_id)
+        if ds is None:
+            return (
+                f"Dataset '{dataset_id}' not found in the {dcat.portal_url} catalog. "
+                "Use search_datasets first and pass a Dataset ID from its results."
+            )
+
+        lines = [f"# {ds.title}", f"Dataset ID: `{ds.id}`"]
+        if ds.description:
+            lines.append(f"\n{ds.description[:800]}")
+        if ds.publisher:
+            lines.append(f"\nPublisher: {ds.publisher}")
+        lines.append(f"Modified: {ds.modified[:10] or '?'}  Issued: {ds.issued[:10] or '?'}")
+        if ds.themes:
+            lines.append(f"Themes: {', '.join(ds.themes[:10])}")
+        if ds.keywords:
+            lines.append(f"Keywords: {', '.join(ds.keywords[:15])}")
+        if ds.landing_page:
+            lines.append(f"Landing page: {ds.landing_page}")
+        if ds.license:
+            lines.append(f"License: {ds.license}")
+
+        lines.append(f"\nDistributions ({len(ds.distributions)}):")
+        for i, dist in enumerate(ds.distributions, 1):
+            label = dist.title or dist.format or dist.media_type or "Unnamed"
+            mark = "tabular" if dist.is_tabular else "non-tabular"
+            lines.append(f"  {i}. {label} [{mark}]")
+            lines.append(f"     Media type: {dist.media_type or '?'}")
+            if dist.best_url:
+                lines.append(f"     URL: {dist.best_url}")
+
+        if ds.tabular_distributions:
+            lines.append(
+                f"\nTo load rows: load_resource_data with resource_id=`{ds.id}` "
+                "(uses the first tabular distribution), or pass a distribution "
+                "URL above as resource_id to pick a specific one."
+            )
+        else:
+            lines.append(
+                "\nNo tabular (CSV/TSV) distribution — this dataset cannot be "
+                "loaded as rows. Cite it from its metadata or pick another dataset."
+            )
+        return "\n".join(lines)
+
+    async def _tool_dcat_load(self, dcat: Any, params: dict) -> str:
+        """Load rows from a DCAT distribution.
+
+        ``resource_id`` accepts either a dataset ID (the first tabular
+        distribution is used) or a distribution URL taken from
+        get_dataset_info.
+        """
+        resource_id = str(params.get("resource_id") or "").strip()
+        limit = min(int(params.get("limit", 100) or 100), 1000)
+        if not resource_id:
+            return "Error: resource_id is required (a dataset ID or a distribution URL)."
+
+        target_url = ""
+        dataset_label = resource_id
+        if resource_id.lower().startswith(("http://", "https://")):
+            target_url = resource_id
+        else:
+            ds = await dcat.get_dataset(resource_id)
+            if ds is None:
+                return (
+                    f"Dataset '{resource_id}' not found in the {dcat.portal_url} "
+                    "catalog. Use search_datasets to find a valid Dataset ID."
+                )
+            tabular = ds.tabular_distributions
+            if not tabular:
+                return (
+                    f"Dataset '{ds.title}' has no tabular (CSV/TSV) distribution, "
+                    "so its rows cannot be loaded."
+                )
+            target_url = tabular[0].best_url
+            dataset_label = ds.title
+
+        result = await dcat.load_distribution(target_url, max_rows=limit)
+        rows = result["rows"]
+        if not rows:
+            return (
+                f"No rows returned from {target_url} "
+                f"({result['bytes_read']:,} bytes read)."
+            )
+
+        lines = [
+            f"Dataset: {dataset_label}",
+            f"Distribution: {target_url}",
+            f"Loaded: {result['row_count']} rows, {len(result['columns'])} columns",
+        ]
+        # A DCAT file has no row count in its metadata, so the honest statement
+        # is how many rows we read and whether we stopped early — never a total.
+        if result["truncated"]:
+            lines.append(
+                f"NOTE: truncated at the {limit}-row read limit — this is the "
+                "first slice of the file, not the whole dataset. Any total or "
+                "aggregate you report must be qualified accordingly, or "
+                "re-loaded with a higher limit."
+            )
+        else:
+            lines.append("Complete: the full distribution fit within the read limit.")
+        lines.append(f"Columns ({len(result['columns'])}): {', '.join(result['columns'])}")
+
+        sample = pd.DataFrame(rows[:15])
+        lines.append(f"\nSample ({min(15, len(rows))} rows):\n")
+        lines.append(sample.to_string(index=False, max_colwidth=40))
         return "\n".join(lines)
 
     async def _tool_search(self, client: httpx.AsyncClient, params: dict) -> str:
@@ -857,8 +1187,167 @@ class LLMAnalysisAgent(BaseAgent):
     # -- code generation for notebooks -------------------------------------
 
     @staticmethod
+    def _dcat_catalog_search_code(
+        catalog_url: str, query: str, rows: int, helper: str
+    ) -> str:
+        """Code that fetches a DCAT catalog and keyword-searches it locally.
+
+        Shared by the ``search_datasets`` cell and the ``semantic_search_resources``
+        stand-in so the two cannot drift apart.
+        """
+        return (
+            "import requests\n\n"
+            f"CATALOG_URL = {catalog_url!r}\n"
+            f"QUERY = {query!r}\n\n"
+            "catalog = requests.get(CATALOG_URL, timeout=60).json()\n"
+            "datasets = catalog.get('dataset', [])\n"
+            "print(f'Catalog: {len(datasets)} datasets')\n\n"
+            + helper
+            + "\n"
+            "terms = [t for t in QUERY.lower().split() if t]\n\n"
+            "def score(ds):\n"
+            "    title = (ds.get('title') or '').lower()\n"
+            "    desc = (ds.get('description') or '').lower()\n"
+            "    kws = ' '.join(ds.get('keyword') or []).lower()\n"
+            "    return sum(3 * (t in title) + 2 * (t in kws) + (t in desc) for t in terms)\n\n"
+            "matches = [d for d in datasets if score(d) > 0]\n"
+            "matches.sort(key=score, reverse=True)\n\n"
+            f"for ds in matches[:{rows}]:\n"
+            "    print(f\"{short_id(ds):14} {ds.get('title', '')}\")\n"
+        )
+
+    @staticmethod
+    def _code_for_dcat_tool(tool_name: str, tool_input: dict, portal_url: str) -> str:
+        """Reproducible code for a DCAT portal call.
+
+        A DCAT catalog is a static document, so the reproduction is: fetch the
+        catalog, find the dataset, read the distribution.  The row read uses
+        ``pd.read_csv(..., nrows=N)``, which streams and stops the same way the
+        agent's own loader does — so the notebook reproduces the same slice
+        rather than silently pulling a much larger file.
+
+        The bodies below are templates rather than concatenated fragments: the
+        generated code is full of quotes and f-strings, and hand-escaping it
+        into Python string literals is how broken cells get shipped.
+        """
+        catalog_url = _catalog_url_for_url(portal_url) or f"{portal_url}/data.json"
+
+        # Shared helper the generated cells use to recover a portal's short
+        # dataset ID from the DCAT identifier URL.
+        helper = (
+            "def short_id(ds):\n"
+            '    """Portal dataset ID = last path segment of the DCAT identifier."""\n'
+            "    ident = ds.get('identifier') or ''\n"
+            "    return ident.rstrip('/').rsplit('/', 1)[-1]\n"
+        )
+
+        if tool_name == "semantic_search_resources":
+            # Same problem as the CKAN stand-in: the live tool queries a private
+            # Pinecone index the notebook cannot reach. On a DCAT portal the
+            # public equivalent is a keyword search of the catalog document —
+            # NOT CKAN's package_search, which does not exist here and would
+            # 404 on every run.
+            query = tool_input.get("query", "")
+            try:
+                rows = int(tool_input.get("n_results", 10))
+            except (TypeError, ValueError):
+                rows = 10
+            return (
+                "# Resource discovery. The concierge used a semantic (vector) search\n"
+                "# over pre-indexed resource metadata here; the public equivalent for a\n"
+                "# DCAT portal is a keyword search of the catalog document.\n"
+                + LLMAnalysisAgent._dcat_catalog_search_code(
+                    catalog_url, query, min(rows, 20), helper
+                )
+            )
+
+        if tool_name == "search_datasets":
+            query = tool_input.get("query", "")
+            rows = min(int(tool_input.get("rows", 10) or 10), 20)
+            return "# Search the DCAT catalog (fetched once, searched locally)\n" + (
+                LLMAnalysisAgent._dcat_catalog_search_code(catalog_url, query, rows, helper)
+            )
+
+        if tool_name == "get_dataset_info":
+            did = tool_input.get("dataset_id", "")
+            return (
+                "# Inspect one catalog dataset and its distributions\n"
+                "import requests\n\n"
+                f"CATALOG_URL = {catalog_url!r}\n"
+                f"DATASET_ID = {did!r}\n\n"
+                "catalog = requests.get(CATALOG_URL, timeout=60).json()\n\n"
+                + helper
+                + "\n"
+                "match = next(\n"
+                "    (d for d in catalog.get('dataset', []) if short_id(d) == DATASET_ID),\n"
+                "    None,\n"
+                ")\n\n"
+                "if match is None:\n"
+                "    print(f'Dataset {DATASET_ID} not found in catalog')\n"
+                "else:\n"
+                "    print(match.get('title', ''))\n"
+                "    print(match.get('description', '')[:400])\n"
+                "    print()\n"
+                "    for dist in match.get('distribution', []):\n"
+                "        media = dist.get('mediaType') or dist.get('format') or '?'\n"
+                "        print(f\"  {media:28} {dist.get('downloadURL', '')}\")\n"
+            )
+
+        if tool_name == "load_resource_data":
+            rid = str(tool_input.get("resource_id", ""))
+            limit = min(int(tool_input.get("limit", 100) or 100), 1000)
+
+            if rid.lower().startswith(("http://", "https://")):
+                preamble = (
+                    "# Load rows from a DCAT distribution\n"
+                    f"CSV_URL = {rid!r}\n\n"
+                )
+            else:
+                # Resolve the dataset's first tabular distribution the same way
+                # the agent did, so the notebook is not pinned to a URL the
+                # portal may re-issue.
+                preamble = (
+                    "# Resolve the dataset's first CSV distribution, then load rows\n"
+                    "import requests\n\n"
+                    f"CATALOG_URL = {catalog_url!r}\n"
+                    f"DATASET_ID = {rid!r}\n\n"
+                    "catalog = requests.get(CATALOG_URL, timeout=60).json()\n\n"
+                    + helper
+                    + "\n"
+                    "match = next(\n"
+                    "    (d for d in catalog.get('dataset', []) if short_id(d) == DATASET_ID),\n"
+                    "    None,\n"
+                    ")\n"
+                    "CSV_URL = next(\n"
+                    "    (\n"
+                    "        d['downloadURL']\n"
+                    "        for d in (match or {}).get('distribution', [])\n"
+                    "        if d.get('mediaType') == 'text/csv' and d.get('downloadURL')\n"
+                    "    ),\n"
+                    "    None,\n"
+                    ")\n"
+                    "print(f'CSV distribution: {CSV_URL}')\n\n"
+                )
+
+            return (
+                preamble
+                + "import pandas as pd\n\n"
+                + "# nrows stops the read at the same slice the agent loaded — a DCAT\n"
+                + "# distribution is a static file with no server-side row limit.\n"
+                + f"df = pd.read_csv(CSV_URL, nrows={limit})\n\n"
+                + "print(f'Loaded {len(df)} rows, {len(df.columns)} columns')\n"
+                + "print('Columns: ' + ', '.join(df.columns.tolist()))\n"
+                + "df.head(10)\n"
+            )
+
+        return f"# {tool_name}: {json.dumps(tool_input)}"
+
+    @staticmethod
     def _code_for_tool(tool_name: str, tool_input: dict, portal_url: str) -> str:
         """Generate reproducible Python code for a tool call."""
+        if _portal_type_for_url(portal_url) == _PORTAL_TYPE_DCAT:
+            return LLMAnalysisAgent._code_for_dcat_tool(tool_name, tool_input, portal_url)
+
         if tool_name == "semantic_search_resources":
             q = tool_input.get("query", "")
             try:
@@ -1340,12 +1829,34 @@ class LLMAnalysisAgent(BaseAgent):
 
                             total_match = _re.search(r"Total records:\s*([\d,]+)", result_text)
                             if total_match:
+                                # CKAN's DataStore reports the resource total.
                                 try:
                                     count = int(total_match.group(1).replace(",", ""))
                                     resource_record_counts.append(count)
                                     total_rows_loaded += min(count, tool_input.get("limit", 100))
                                 except ValueError:
                                     pass
+                            else:
+                                # DCAT distributions are files: there is no
+                                # server-side total, only what we actually
+                                # streamed. Count the real rows read, and treat
+                                # the file's size as known ONLY when the read
+                                # ran to completion — a truncated read tells us
+                                # nothing about the dataset's true size, and
+                                # recording a floor as if it were the total
+                                # would inflate the source-metadata factor with
+                                # a number nobody measured.
+                                loaded_match = _re.search(
+                                    r"Loaded:\s*([\d,]+)\s+rows", result_text
+                                )
+                                if loaded_match:
+                                    try:
+                                        loaded = int(loaded_match.group(1).replace(",", ""))
+                                        total_rows_loaded += loaded
+                                        if "NOTE: truncated" not in result_text:
+                                            resource_record_counts.append(loaded)
+                                    except ValueError:
+                                        pass
                             rid = tool_input.get("resource_id", "")
                             if rid:
                                 resource_ids_seen.add(rid)

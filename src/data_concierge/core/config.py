@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     )
 
     # Application
-    app_name: str = "Verikan"
+    app_name: str = " AI Data Concierge"
     app_version: str = "0.1.0"
     environment: Literal["development", "staging", "production"] = "development"
     debug: bool = False
@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     notebook_verification_timeout_seconds: int = 180
     notebook_verification_cell_timeout_seconds: int = 60
 
-    # Notebook review (third signal) — an adversarial, static
+    # Notebook review (#131, third signal) — an adversarial "roborev-style"
     # static review of each generated notebook's method: does the code
     # actually derive the numbers the answer claims, are the datasets and
     # citations sound, is anything hardcoded that should be computed. Runs
@@ -161,6 +161,12 @@ class Settings(BaseSettings):
     pinecone_api_key: SecretStr = Field(default=SecretStr(""))
     pinecone_index_name: str = "ckan-dathere-index"
     pinecone_namespace: str = "ckan-namespace"
+    # Which portal owns records written before per-portal tagging existed.
+    # Those records carry no ``site_id``, so a search scoped to this portal
+    # also matches untagged ones; every other portal matches strictly. This is
+    # what lets a shared namespace hold several portals without a one-way
+    # metadata backfill over the existing corpus.
+    pinecone_legacy_site_id: str = "ckan"
 
     # External APIs - Federal Data Sources
     bls_api_key: SecretStr = Field(default=SecretStr(""))
@@ -192,9 +198,7 @@ class Settings(BaseSettings):
     # settings exist). Admin-panel edits override these values until
     # github_settings.json is cleared.
     github_token: SecretStr = Field(default=SecretStr(""))
-    # Empty by default: publishing stays inactive until an operator names
-    # their own repo (is_publishing_active requires repo AND token).
-    github_repo: str = ""
+    github_repo: str = "dathere/data-concierge-notebooks"
     github_branch: str = "main"
     github_drafts_folder: str = "drafts"
     github_verified_folder: str = "verified"

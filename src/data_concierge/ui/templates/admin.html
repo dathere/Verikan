@@ -101,7 +101,7 @@
                 </button>
                 <button class="nav-link" id="ckansites-tab" data-bs-toggle="tab"
                         data-bs-target="#ckansites" type="button" role="tab" aria-controls="ckansites">
-                    <i class="bi bi-globe" aria-hidden="true"></i>CKAN Sites
+                    <i class="bi bi-globe" aria-hidden="true"></i>Data Portals
                 </button>
 
                 <div class="admin-nav-group">Insights</div>
@@ -538,7 +538,7 @@
                             <h2><i class="bi bi-clipboard2-check" aria-hidden="true"></i>Notebook Reviews</h2>
                             <p class="pane-sub">
                                 Every generated notebook is executed, reconciled against its answer,
-                                and adversarially reviewed as soon as it is created.
+                                and adversarially reviewed (roborev-style) as soon as it is created.
                                 The combined verdict feeds the notebook-verification confidence factor.
                             </p>
                         </div>
@@ -747,24 +747,73 @@
                 <div class="p-4">
                     <div class="pane-header">
                         <div>
-                            <h2><i class="bi bi-globe" aria-hidden="true"></i>CKAN Sites</h2>
+                            <h2><i class="bi bi-globe" aria-hidden="true"></i>Data Portals</h2>
                             <p class="pane-sub">
-                                Register CKAN open data portals (like Pittsburgh&rsquo;s WPRDC) that the
-                                agent should search when answering questions. Registered sites are
-                                available immediately &mdash; no restart required.
+                                Register open data portals that the agent should search when answering
+                                questions &mdash; <strong>CKAN</strong> portals with a live action API
+                                (like Pittsburgh&rsquo;s WPRDC) and <strong>DCAT</strong> portals that
+                                publish a <code>/data.json</code> catalog (like data.pa.gov).
+                                Registered portals are available immediately &mdash; no restart required.
                             </p>
                         </div>
                         <div class="pane-actions">
                             <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCkanSiteModal">
-                                <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>Add Site
+                                <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>Add Portal
                             </button>
                         </div>
                     </div>
                     <div id="ckanSiteList" class="row g-3">
                         <div class="col-12 empty-state">
                             <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
-                            Loading CKAN sites…
+                            Loading data portals…
                         </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="pane-header">
+                        <div>
+                            <h2 class="h5"><i class="bi bi-database-down me-2" aria-hidden="true"></i>Onboarding Runs</h2>
+                            <p class="pane-sub">
+                                Download a portal&rsquo;s CSV resources, profile every column with
+                                <code>qsv</code>, and build the searchable data dictionary &mdash;
+                                optionally pushing it to Pinecone so the agent can find datasets
+                                semantically. Start a run from a portal&rsquo;s <strong>Onboard</strong>
+                                button above and watch its output here.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <button class="btn btn-outline-secondary btn-sm" id="onboardRefreshBtn" type="button">
+                                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="onboardWarnings"></div>
+
+                    <div id="onboardJobList">
+                        <div class="empty-state">
+                            <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                            Loading onboarding runs…
+                        </div>
+                    </div>
+
+                    <div id="onboardLogPanel" class="mt-3 d-none">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                            <div>
+                                <strong id="onboardLogTitle">Job log</strong>
+                                <span id="onboardLogStatus" class="ms-2"></span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-outline-danger btn-sm d-none" id="onboardCancelBtn" type="button">
+                                    <i class="bi bi-stop-circle me-1" aria-hidden="true"></i>Cancel run
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" id="onboardLogCloseBtn" type="button">
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                        <pre id="onboardLog" class="onboarding-log" aria-live="polite"></pre>
                     </div>
                 </div>
             </div>
@@ -877,7 +926,8 @@
                     <div class="mb-3 pane-narrow">
                         <label for="spTarget" class="form-label">Which prompt</label>
                         <select class="form-select" id="spTarget">
-                            <option value="ckan">CKAN &amp; open-data portals (WPRDC, default chat)</option>
+                            <option value="ckan">CKAN portals (WPRDC, default chat)</option>
+                            <option value="dcat">DCAT catalog portals (data.pa.gov)</option>
                             <option value="mcp">MCP-backed sources (Census, FBI Crime)</option>
                             <option value="notebook_header">Notebook — title &amp; how-to cell</option>
                             <option value="notebook_results">Notebook — results &amp; confidence cell</option>
@@ -1011,7 +1061,7 @@
                             <label for="ghRepo" class="form-label">Repository</label>
                             <input type="text" class="form-control" id="ghRepo"
                                    placeholder="owner/repo-name">
-                            <div class="form-text">e.g. your-org/your-notebooks-repo</div>
+                            <div class="form-text">e.g. dathere/data-concierge-notebooks</div>
                         </div>
 
                         <div class="mb-3">
@@ -1369,11 +1419,127 @@
     </div>
 
     <!-- Add CKAN Site Modal -->
+    <!-- Start an onboarding run -->
+    <div class="modal fade" id="onboardRunModal" tabindex="-1" aria-labelledby="onboardRunModalTitle">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="onboardRunModalTitle">
+                        <i class="bi bi-database-down me-2" aria-hidden="true"></i>Onboard Portal
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small" id="onboardRunTarget"></p>
+
+                    <div class="alert alert-warning small">
+                        <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                        A full portal run downloads every CSV resource and can take
+                        <strong>hours</strong>. Start with a dataset filter or a small limit to
+                        confirm the portal behaves, then widen it.
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="onboardDatasetFilter">Dataset filter</label>
+                            <input type="text" class="form-control" id="onboardDatasetFilter"
+                                   maxlength="200" placeholder="e.g. opioid (blank = every dataset)">
+                            <div class="form-text">Only datasets whose title, description, or keywords match.</div>
+                        </div>
+                        <div class="col-md-3 onboard-dcat-only">
+                            <label class="form-label" for="onboardLimit">Max datasets</label>
+                            <input type="number" class="form-control" id="onboardLimit"
+                                   min="0" max="5000" placeholder="0 = all">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="onboardConcurrency">Concurrency</label>
+                            <input type="number" class="form-control" id="onboardConcurrency"
+                                   min="1" max="10" value="3">
+                        </div>
+                        <div class="col-md-3 onboard-dcat-only">
+                            <label class="form-label" for="onboardMaxMb">Per-file cap (MB)</label>
+                            <input type="number" class="form-control" id="onboardMaxMb"
+                                   min="1" max="2000" value="200">
+                            <div class="form-text">A DCAT file has no row limit; this caps the download.</div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="onboardSkipQsv" checked>
+                        <label class="form-check-label" for="onboardSkipQsv">
+                            Skip AI descriptions (<code>qsv describegpt</code>)
+                            <span class="text-muted d-block small">
+                                Column stats and top values are still computed. Uncheck only if
+                                <code>OPENROUTER_API_KEY</code> is set &mdash; it costs an LLM call per dataset.
+                            </span>
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="onboardSkipDownload">
+                        <label class="form-check-label" for="onboardSkipDownload">
+                            Reuse CSVs already on disk (resume an interrupted run)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="onboardRebuildIndex">
+                        <label class="form-check-label" for="onboardRebuildIndex">
+                            Rebuild the index only &mdash; no downloads, no API calls
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="onboardNoSync">
+                        <label class="form-check-label" for="onboardNoSync">
+                            Skip syncing results to the storage backend
+                        </label>
+                    </div>
+
+                    <hr>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="onboardPinecone">
+                        <label class="form-check-label" for="onboardPinecone">
+                            <strong>Upload to Pinecone</strong> when the run finishes
+                            <span class="text-muted d-block small">
+                                Makes the profiled datasets findable by the agent&rsquo;s semantic search.
+                            </span>
+                        </label>
+                    </div>
+                    <div id="onboardPineconeOptions" class="ms-4 mt-2 d-none">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="onboardPineconeDryRun" checked>
+                            <label class="form-check-label" for="onboardPineconeDryRun">
+                                Dry run &mdash; build and show the records without writing
+                            </label>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-md-6">
+                                <label class="form-label small" for="onboardPineconeIndex">Index (blank = configured default)</label>
+                                <input type="text" class="form-control form-control-sm" id="onboardPineconeIndex" maxlength="64">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small" for="onboardPineconeNamespace">Namespace (blank = configured default)</label>
+                                <input type="text" class="form-control form-control-sm" id="onboardPineconeNamespace" maxlength="64">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="onboardStartBtn">
+                        <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Start run
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="addCkanSiteModal" tabindex="-1" aria-labelledby="addCkanSiteModalTitle">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="addCkanSiteModalTitle"><i class="bi bi-globe me-2" aria-hidden="true"></i>Add CKAN Site</h5>
+                    <h5 class="modal-title" id="addCkanSiteModalTitle"><i class="bi bi-globe me-2" aria-hidden="true"></i>Add Data Portal</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -1386,12 +1552,34 @@
                                    placeholder="e.g., NYC Open Data">
                         </div>
                         <div class="mb-3">
+                            <label class="form-label" for="ckanSiteType">
+                                Portal Type <span class="text-danger" aria-hidden="true">*</span>
+                            </label>
+                            <select class="form-select" id="ckanSiteType">
+                                <option value="ckan" selected>CKAN &mdash; live action API (search, DataStore SQL)</option>
+                                <option value="dcat">DCAT &mdash; catalog document (<code>/data.json</code>), e.g. Socrata, ArcGIS Hub</option>
+                            </select>
+                            <div class="form-text">
+                                Not sure? Open <code>&lt;portal&gt;/api/3/action/package_list</code> &mdash; if it returns
+                                JSON the portal is CKAN. If that 404s but <code>&lt;portal&gt;/data.json</code> works, it is DCAT.
+                            </div>
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label" for="ckanSiteUrl">
-                                CKAN Portal URL <span class="text-danger" aria-hidden="true">*</span>
+                                Portal URL <span class="text-danger" aria-hidden="true">*</span>
                             </label>
                             <input type="url" class="form-control" id="ckanSiteUrl" required
                                    placeholder="https://data.cityofnewyork.us">
-                            <div class="form-text">The base URL of the CKAN instance (without <code>/api/3</code>).</div>
+                            <div class="form-text">The base URL of the portal (for CKAN, without <code>/api/3</code>).</div>
+                        </div>
+                        <div class="mb-3 d-none" id="ckanSiteCatalogWrap">
+                            <label class="form-label" for="ckanSiteCatalogUrl">Catalog URL</label>
+                            <input type="url" class="form-control" id="ckanSiteCatalogUrl"
+                                   placeholder="https://data.pa.gov/data.json">
+                            <div class="form-text">
+                                Optional. Leave blank to probe <code>/data.json</code>,
+                                <code>/api/dcat.json</code>, and <code>/catalog.json</code> under the portal URL.
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="ckanSiteId">Site ID</label>
@@ -1399,7 +1587,7 @@
                                    placeholder="Auto-generated from name if blank">
                             <div class="form-text">Stable, lowercase identifier used internally (e.g., <code>nyc-open-data</code>).</div>
                         </div>
-                        <div class="mb-3">
+                        <div class="mb-3" id="ckanSiteOrgWrap">
                             <label class="form-label" for="ckanSiteOrg">Default Organization</label>
                             <input type="text" class="form-control" id="ckanSiteOrg"
                                    placeholder="e.g., city-of-pittsburgh (optional)">

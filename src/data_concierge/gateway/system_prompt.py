@@ -13,9 +13,9 @@ are configurable:
 * ``notebook_results_template`` — the results/answer markdown cell near the
   bottom of every generated notebook.
 * ``notebook_review_template`` — the system prompt for the adversarial
-  adversarial method review that runs on every generated notebook (#131,
+  roborev-style method review that runs on every generated notebook (#131,
   ``agents/notebook_reviewer.py``). This template plays the role of
-  the reviewer's guidelines: edit it to teach the reviewer
+  ``review_guidelines`` in ``.roborev.toml``: edit it to teach the reviewer
   new defect classes.
 
 Each template is a Python ``str.format`` template. The agent fills in a fixed
@@ -48,6 +48,12 @@ CKAN_PLACEHOLDERS: tuple[str, ...] = (
     "portal_name",
     "portal_url",
     "org_block",
+    "other_portals_block",
+)
+DCAT_PLACEHOLDERS: tuple[str, ...] = (
+    "portal_name",
+    "portal_url",
+    "description",
     "other_portals_block",
 )
 MCP_PLACEHOLDERS: tuple[str, ...] = (
@@ -196,7 +202,7 @@ unavailable.
 # hardcoded in ``notebook_generator._create_title_cell`` /
 # ``_create_results_cell``, so generated notebooks are unchanged until an
 # admin edits these.
-DEFAULT_NOTEBOOK_HEADER_TEMPLATE = """# 🔬 Verikan — Reproducible Analysis
+DEFAULT_NOTEBOOK_HEADER_TEMPLATE = """# 🔬  AI Data Concierge - Reproducible Analysis
 
 <a href="https://colab.research.google.com/" target="_parent">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
@@ -219,7 +225,7 @@ DEFAULT_NOTEBOOK_HEADER_TEMPLATE = """# 🔬 Verikan — Reproducible Analysis
 
 ## 📖 How to Use This Notebook
 
-This notebook reproduces the exact analysis performed by **Verikan**.
+This notebook reproduces the exact analysis performed by the ** AI Data Concierge**.
 Follow the steps below to verify, modify, or extend the analysis.
 
 ### ✅ Quick Start
@@ -266,7 +272,7 @@ The Data Concierge evaluates the reliability of its answer using multiple factor
 {confidence_block}"""
 
 # System prompt for the adversarial notebook method review (#131, third
-# signal — adversarial review applied to generated notebooks). No placeholders:
+# signal — the roborev role applied to generated notebooks). No placeholders:
 # the question, answer, and notebook go in the user message at review time.
 # NOTE: this is a ``str.format`` template like the others, so literal braces
 # would need doubling — keep the guidelines brace-free.
@@ -313,11 +319,60 @@ code does vs what the answer claims), and the offending cell index when \
 there is one."""
 NOTEBOOK_REVIEW_PLACEHOLDERS: tuple[str, ...] = ()
 
+DEFAULT_DCAT_TEMPLATE = """You are an AI Data Concierge — an expert at finding, loading, \
+and analysing open government data to answer questions with citations.
+
+Your primary source is the **{portal_name}** DCAT catalog at {portal_url}.
+{description}
+
+## What a DCAT portal is
+
+This portal publishes a **catalog document** (DCAT-US / Project Open Data), \
+not a queryable database. That changes how you work with it:
+
+- The catalog lists every dataset and its *distributions* — downloadable \
+  files such as CSV, JSON, or GeoJSON.
+- There is **no SQL**. `run_sql_query` does not work here. Load rows with \
+  `load_resource_data`, then filter and aggregate them yourself in pandas.
+- Search runs over catalog metadata (titles, keywords, themes, \
+  descriptions), so it matches how a dataset is *described*, not its \
+  contents. If a specific term returns nothing, retry with the vocabulary a \
+  government agency would use in a dataset title.
+
+## Tools
+
+1. `search_datasets(query, rows)` — search the catalog. Start here.
+2. `get_dataset_info(dataset_id)` — full metadata plus every distribution \
+   URL. Use the Dataset ID from search results.
+3. `load_resource_data(resource_id, limit)` — load rows. `resource_id` is \
+   either a Dataset ID (loads its first tabular distribution) or a specific \
+   distribution URL from `get_dataset_info`.
+
+## Reporting rules
+
+- A DCAT distribution is a static file with no server-side row limit, so \
+  `load_resource_data` streams and **stops** at your `limit`. When a result \
+  says it was truncated, you have the first N rows of the file — **not** the \
+  whole dataset. Never state a total, a maximum, or a "the data shows X \
+  overall" claim from a truncated read. Either raise the limit and reload, \
+  or say explicitly that the figure covers only the rows examined.
+- The catalog reports no row count, so never guess at a dataset's size.
+- Report figures exactly as they appear in the loaded rows. Do not \
+  recompute a published rate or percentage by hand.
+- Cite the dataset title, the portal, and the distribution URL you actually \
+  read.
+{other_portals_block}
+Work step by step: search, inspect, load, analyse, then answer with \
+specific numbers and a clear statement of what the data covers."""
+
+DCAT_PLACEHOLDER_NOTE = ""
+
 # Registry of every editable template: base key -> (default, placeholders).
 # Storage / API field names derive from the base key: ``{base}_template``,
 # ``{base}_is_custom``, ``default_{base}_template``, ``{base}_placeholders``.
 TEMPLATE_REGISTRY: dict[str, tuple[str, tuple[str, ...]]] = {
     "ckan": (DEFAULT_CKAN_TEMPLATE, CKAN_PLACEHOLDERS),
+    "dcat": (DEFAULT_DCAT_TEMPLATE, DCAT_PLACEHOLDERS),
     "mcp": (DEFAULT_MCP_TEMPLATE, MCP_PLACEHOLDERS),
     "notebook_header": (DEFAULT_NOTEBOOK_HEADER_TEMPLATE, NOTEBOOK_HEADER_PLACEHOLDERS),
     "notebook_results": (DEFAULT_NOTEBOOK_RESULTS_TEMPLATE, NOTEBOOK_RESULTS_PLACEHOLDERS),
@@ -383,6 +438,11 @@ def _get_template(base: str) -> str:
 def get_ckan_template() -> str:
     """Effective CKAN prompt template (custom override or default)."""
     return _get_template("ckan")
+
+
+def get_dcat_template() -> str:
+    """Effective DCAT prompt template (custom override or default)."""
+    return _get_template("dcat")
 
 
 def get_mcp_template() -> str:
