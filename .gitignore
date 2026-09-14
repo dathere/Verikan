@@ -176,3 +176,5 @@ logs/
 # Onboarded CKAN data-dictionary indexes (large, generated; prod reads from GCS)
 ckan_onboard/
 
+# roborev snapshots
+/.roborev/
