@@ -27,11 +27,19 @@ boundary, or make it a manual script.
 | `ruff check src/ tests/ scripts/` | **Yes** | Currently clean — please keep it that way |
 | `ruff format --check` | No — advisory | Pre-existing drift across many files |
 | `mypy src/` | No — advisory | ~90 pre-existing errors, mostly missing annotations |
+| `uv lock --check` | **Yes** | `uv.lock` must match `pyproject.toml` — no backlog, so it's a gate |
 
 The advisory job reports so the debt stays visible, but it does not block your pull request.
 Don't add *new* type errors; fixing ones you touch is welcome. **Please don't reformat files
 you aren't otherwise changing** — a repo-wide `ruff format` would bury real changes in noise,
 which is exactly why it isn't a gate.
+
+The `lockfile` job is blocking for the same reason `ruff check` is: it passes today, so keeping
+it passing costs nothing. Neither CI nor the Docker image installs from `uv.lock` — both use pip
+— but `uv sync --frozen` is a [documented way to set up a clone](README.md#install-and-run), and
+the lock has quietly rotted before, once leaving notebook verification with no Jupyter kernel.
+If you change a dependency, run `uv lock` and commit the result alongside the `pyproject.toml`
+edit. Editing `[tool.ruff]`, `[tool.mypy]` and the like does not affect the lock.
 
 Pull requests also get an automated adversarial review (see [`.roborev.toml`](.roborev.toml))
 that looks for this project's specific failure modes. It's a reviewer, not a gate — a finding

@@ -47,6 +47,25 @@ jobs:
       - name: Test
         run: pytest -q --no-cov
 
+  lockfile:
+    name: lockfile
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Fix a failure here by running `uv lock` and committing the result.
+      # Kept out of `test` on purpose: the lock does not vary by Python
+      # version, so the matrix would check it twice, and it needs no project
+      # install. Nothing else watches this file — .roborev.toml excludes
+      # uv.lock from review. See CONTRIBUTING.md for why it is a gate.
+      - name: Check uv.lock matches pyproject.toml
+        run: pip install uv && uv lock --check
+
   types:
     name: types & formatting (advisory)
     runs-on: ubuntu-latest
