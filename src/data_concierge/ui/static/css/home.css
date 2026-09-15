@@ -1,0 +1,199 @@
+/* The question page uses the shared palette, with a quieter layout. */
+.concierge-home {
+    --dc-navbar-h: 72px;
+    background: var(--dc-bg-alt);
+}
+
+.skip-link {
+    position: fixed;
+    top: -100px;
+    left: 1rem;
+    z-index: 1100;
+    padding: 0.7rem 1rem;
+    color: var(--dc-on-primary);
+    background: var(--dc-primary);
+    border-radius: var(--dc-radius-sm);
+}
+.skip-link:focus { top: 0.75rem; }
+
+.concierge-home .navbar {
+    padding: 0 2rem;
+    box-shadow: none;
+    background: var(--dc-bg-alt) !important;
+}
+.concierge-home .navbar-brand { margin-right: 0; gap: 0.65rem; }
+.concierge-home .navbar > .container-fluid > .d-flex { min-width: 0; }
+.concierge-home .brand-lockup { display: inline-flex; margin-left: 0; min-width: 0; }
+.concierge-home .brand-name { font-size: 1.2rem; letter-spacing: -0.045em; overflow: hidden; text-overflow: ellipsis; }
+.concierge-home .navbar .dc-tag-beta {
+    color: var(--dc-text-muted);
+    background: var(--dc-surface-2);
+    font-weight: 500;
+    font-size: 0.6rem;
+}
+.concierge-home #sidebarToggle { border-color: transparent; width: 40px; height: 40px; }
+.concierge-home .nav-cluster { gap: 1.75rem; }
+.home-nav-link { color: var(--dc-text-secondary); font-size: 0.82rem; text-decoration: none; }
+.home-nav-link:hover { color: var(--dc-text); }
+.concierge-home .navbar .btn { border-radius: var(--dc-radius-pill); padding: 0.5rem 1.1rem; }
+
+.concierge-home .main-content { min-height: calc(100svh - var(--dc-navbar-h)); }
+.concierge-home .landing-page { padding: 1.75rem 1.5rem 1.5rem; }
+.concierge-home .landing-page::before { display: none; }
+.concierge-home .landing-inner { max-width: 760px; }
+.concierge-home .landing-logo { height: 26px; max-width: 180px; object-fit: contain; margin-bottom: 1rem; }
+.concierge-home .landing-page h1 {
+    font-size: clamp(2.75rem, 6vw, 3.5rem);
+    font-weight: 600;
+    line-height: 1.12;
+    letter-spacing: -0.06em;
+    margin-bottom: 0.8rem;
+    overflow-wrap: anywhere;
+}
+.concierge-home .hero-tagline {
+    font-size: 1.15rem;
+    line-height: 1.5;
+    color: var(--dc-text-secondary);
+    text-transform: none;
+    font-weight: 450;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.7rem;
+}
+.concierge-home .landing-lead {
+    max-width: 620px;
+    font-size: 0.92rem;
+    line-height: 1.75;
+    color: var(--dc-text-muted);
+    margin-bottom: 2rem;
+    text-wrap: pretty;
+}
+.concierge-home .search-container { max-width: 700px; margin: 1.75rem auto 0; }
+.concierge-home .search-container .input-group {
+    border-radius: var(--dc-radius-pill);
+    border-color: var(--dc-border-strong);
+    box-shadow: var(--dc-shadow);
+    padding: 0.35rem;
+    align-items: center;
+    overflow: visible;
+    flex-wrap: nowrap;
+}
+.concierge-home .search-container .input-group:focus-within {
+    border-color: var(--dc-primary);
+    box-shadow: var(--dc-ring);
+}
+.concierge-home .search-container .form-control {
+    min-width: 0;
+    padding: 1rem 1.2rem;
+    font-size: 0.98rem;
+    border-radius: var(--dc-radius-pill) !important;
+}
+.concierge-home .search-container .form-control:focus-visible { outline: none; }
+.concierge-home .search-container .btn {
+    border-radius: 50% !important;
+    height: 46px;
+    width: 46px;
+    flex: 0 0 46px;
+    margin: 0;
+    font-size: 1.25rem;
+}
+.concierge-home .search-container .btn:disabled {
+    background: var(--dc-surface-hover);
+    color: var(--dc-text-muted);
+    opacity: 1;
+}
+.starter-questions { margin: 1.75rem auto 0; max-width: 700px; }
+.concierge-home .landing-eyebrow {
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    margin-bottom: 0.85rem;
+}
+.concierge-home .starter-questions .example-grid { gap: 0.5rem; }
+.concierge-home .starter-questions .example-btn {
+    max-width: 100%;
+    background: var(--dc-surface-2);
+    box-shadow: none;
+    border-color: transparent;
+    font-size: 0.78rem;
+    font-weight: 400;
+    line-height: 1.5;
+    padding: 0.5rem 1rem;
+    text-wrap: pretty;
+    transition: background-color var(--dc-dur) var(--dc-ease),
+        color var(--dc-dur) var(--dc-ease), border-color var(--dc-dur) var(--dc-ease);
+}
+.concierge-home .starter-questions .example-btn:hover {
+    color: var(--dc-primary);
+    background: var(--dc-primary-soft);
+    border-color: var(--dc-border);
+    transform: none;
+}
+.more-questions { margin-top: 0.9rem; }
+.more-questions summary {
+    color: var(--dc-text-muted);
+    font-size: 0.72rem;
+    padding: 0.3rem;
+    margin: 0 auto;
+    width: fit-content;
+    cursor: pointer;
+}
+.more-questions summary:hover { color: var(--dc-text); }
+.more-questions summary:focus-visible { outline: 2px solid var(--dc-primary); outline-offset: 2px; }
+.more-questions[open] summary { margin-bottom: 0.75rem; }
+
+.concierge-home .sidebar-inner { overflow-y: auto; }
+.concierge-home.sidebar-collapsed .sidebar { box-shadow: none; }
+.concierge-home .chat-list { min-height: 80px; }
+.sidebar-navigation {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--dc-border);
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    gap: 0.1rem;
+    flex-shrink: 0;
+}
+.sidebar-navigation a, .sidebar-navigation button {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    border: none;
+    border-radius: var(--dc-radius-sm);
+    color: var(--dc-text-secondary);
+    background: transparent;
+    text-decoration: none;
+    text-align: left;
+    font-size: 0.85rem;
+    padding: 0.65rem 0.7rem;
+}
+.sidebar-navigation a:hover, .sidebar-navigation button:hover { background: var(--dc-surface-hover); color: var(--dc-text); }
+.sidebar-navigation .auth-chip { padding: 0.6rem 0.7rem; }
+.concierge-home .site-footer { padding: 1.35rem 2rem; background: transparent; }
+.home-footer-inner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem 1.5rem; }
+.home-footer-inner p { margin: 0; }
+.home-footer-inner, .home-footer-inner a { color: var(--dc-text-muted); font-size: 0.7rem; }
+.home-footer-inner a { text-decoration: none; }
+.home-footer-inner a:hover { color: var(--dc-text); text-decoration: underline; }
+.footer-credit a { font-weight: 600; }
+.footer-source { text-align: center; }
+
+@media (max-width: 768px) {
+    .concierge-home { --dc-navbar-h: 64px; }
+    .concierge-home .navbar { padding: 0 1rem; }
+    .concierge-home .nav-cluster { gap: 0.75rem; }
+    .concierge-home .desktop-nav { display: none; }
+    .concierge-home .landing-page { padding: 2.5rem 1.25rem; }
+    .concierge-home .landing-lead { font-size: 0.875rem; }
+    .concierge-home .search-container .form-control { padding: 0.9rem 0.75rem; font-size: 1rem; }
+    .concierge-home .site-footer { padding: 1.25rem; }
+    .home-footer-inner { justify-content: center; }
+    .footer-source { order: 1; flex-basis: 100%; }
+}
+
+@media (max-width: 380px) {
+    .concierge-home .navbar { padding: 0 0.5rem; }
+    .concierge-home .brand-name { font-size: 1.05rem; }
+    .concierge-home .landing-page { padding: 2rem 1rem; }
+    .concierge-home .hero-tagline { font-size: 1rem; }
+}

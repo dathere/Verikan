@@ -1,5 +1,6 @@
 """Supervisor agent and LangGraph workflow orchestration."""
 
+from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 from langgraph.graph import END, StateGraph
@@ -9,8 +10,21 @@ from data_concierge.core.confidence import confidence_calculator
 from data_concierge.core.config import settings
 from data_concierge.core.logging import get_logger
 from data_concierge.core.models import ConfidenceScore, QueryIntent, QueryTier
+from data_concierge.core.query_progress import emit_progress
 
 logger = get_logger(__name__)
+
+
+def _with_progress(
+    operation: Callable[[GraphState], Awaitable[GraphState]], stage: str, message: str
+) -> Callable[[GraphState], Awaitable[GraphState]]:
+    """Report a node when LangGraph actually starts it, including retry passes."""
+
+    async def run(state: GraphState) -> GraphState:
+        emit_progress(stage, message)
+        return await operation(state)
+
+    return run
 
 
 class SupervisorAgent:
@@ -624,10 +638,30 @@ def create_llm_graph() -> StateGraph:
 
     workflow = StateGraph(GraphState)
 
-    workflow.add_node("llm_analyze", llm_agent.process)
-    workflow.add_node("generate_notebook", notebook_generator.process)
-    workflow.add_node("calculate_confidence", supervisor.calculate_confidence)
-    workflow.add_node("aggregate", supervisor.aggregate_results)
+    workflow.add_node(
+        "llm_analyze",
+        _with_progress(llm_agent.process, "analyzing", "Planning the analysis"),
+    )
+    workflow.add_node(
+        "generate_notebook",
+        _with_progress(
+            notebook_generator.process,
+            "building_notebook",
+            "Building your reproducible notebook",
+        ),
+    )
+    workflow.add_node(
+        "calculate_confidence",
+        _with_progress(
+            supervisor.calculate_confidence,
+            "checking_answer",
+            "Checking the evidence behind the answer",
+        ),
+    )
+    workflow.add_node(
+        "aggregate",
+        _with_progress(supervisor.aggregate_results, "finishing", "Preparing your answer"),
+    )
 
     workflow.set_entry_point("llm_analyze")
     workflow.add_edge("llm_analyze", "generate_notebook")
@@ -668,16 +702,66 @@ def create_agent_graph() -> StateGraph:
     workflow = StateGraph(GraphState)
 
     # Add nodes
-    workflow.add_node("parse", query_parser.process)
-    workflow.add_node("route", supervisor.route_query)
-    workflow.add_node("find_data", data_finder.process)
-    workflow.add_node("compute", stats_computer.process)
-    workflow.add_node("visualize", viz_builder.process)
-    workflow.add_node("cite", citation_builder.process)
-    workflow.add_node("generate_notebook", notebook_generator.process)
-    workflow.add_node("calculate_confidence", supervisor.calculate_confidence)
-    workflow.add_node("aggregate", supervisor.aggregate_results)
-    workflow.add_node("check_confidence", supervisor.check_confidence)
+    workflow.add_node(
+        "parse",
+        _with_progress(
+            query_parser.process,
+            "interpreting",
+            "Understanding the place, period, and metric",
+        ),
+    )
+    workflow.add_node(
+        "route",
+        _with_progress(supervisor.route_query, "planning", "Choosing how to answer your question"),
+    )
+    workflow.add_node(
+        "find_data",
+        _with_progress(data_finder.process, "searching", "Finding data for your question"),
+    )
+    workflow.add_node(
+        "compute",
+        _with_progress(
+            stats_computer.process,
+            "computing",
+            "Calculating results from the retrieved data",
+        ),
+    )
+    workflow.add_node(
+        "visualize",
+        _with_progress(viz_builder.process, "visualizing", "Preparing a chart of the results"),
+    )
+    workflow.add_node(
+        "cite",
+        _with_progress(citation_builder.process, "citing", "Adding links to the data sources"),
+    )
+    workflow.add_node(
+        "generate_notebook",
+        _with_progress(
+            notebook_generator.process,
+            "building_notebook",
+            "Building your reproducible notebook",
+        ),
+    )
+    workflow.add_node(
+        "calculate_confidence",
+        _with_progress(
+            supervisor.calculate_confidence,
+            "checking_answer",
+            "Checking the evidence behind the answer",
+        ),
+    )
+    workflow.add_node(
+        "aggregate",
+        _with_progress(supervisor.aggregate_results, "finishing", "Preparing your answer"),
+    )
+    workflow.add_node(
+        "check_confidence",
+        _with_progress(
+            supervisor.check_confidence,
+            "checking_answer",
+            "Checking whether the answer needs more evidence",
+        ),
+    )
 
     # Define edges — always start with parsing
     workflow.set_entry_point("parse")

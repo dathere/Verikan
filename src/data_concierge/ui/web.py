@@ -117,8 +117,10 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 def include_api_routes():
     """Include the API routes from the gateway and MCP routers."""
     try:
+        from data_concierge.gateway.query_stream import router as query_stream_router
         from data_concierge.gateway.router import router as api_router
         app.include_router(api_router)
+        app.include_router(query_stream_router)
     except ImportError as e:
         print(f"Warning: Could not import API router: {e}")
         print("API endpoints will not be available.")

@@ -13,6 +13,9 @@
     <link id="hljs-theme-dark" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" rel="stylesheet" disabled>
     <link id="hljs-theme-light" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css" rel="stylesheet">
     <link href="/static/css/style.css?v=20260713-redesign" rel="stylesheet">
+    <link href="/static/css/home.css?v=20260915-simplify" rel="stylesheet">
+    <link href="/static/css/answer-details.css?v=20260915-answers1" rel="stylesheet">
+    <link href="/static/css/query-progress.css?v=20260915-answers1" rel="stylesheet">
     <script>
         // Apply saved theme immediately to prevent flash (light is the default)
         (function() {
@@ -24,56 +27,46 @@
         })();
     </script>
 </head>
-<body>
+<body class="concierge-home sidebar-collapsed">
+    <a class="skip-link" href="#mainContent">Skip to main content</a>
     <!-- Navbar -->
     <nav class="navbar fixed-top">
         <div class="container-fluid px-0">
             <div class="d-flex align-items-center gap-2">
                 <button id="sidebarToggle" class="icon-btn" type="button"
-                        aria-label="Toggle conversations sidebar" title="Toggle sidebar"
+                        aria-label="Toggle navigation and conversations" aria-controls="conversationSidebar"
+                        aria-expanded="false" title="Menu and conversations"
                         onclick="toggleSidebar()">
                     <i class="bi bi-layout-sidebar" aria-hidden="true"></i>
                 </button>
                 <a class="navbar-brand d-flex align-items-center mb-0" href="/">
-                    <img src="{{ landing.logo_url }}" alt="Verikan" class="dc-logo">
                     <span class="brand-lockup">
-                        <span class="brand-name">Verikan</span>
-                        <span class="brand-sub">Data Concierge</span>
+                        <span class="brand-name">{{ landing.title }}</span>
                     </span>
                     {% if landing.show_beta_badge %}<span class="dc-tag dc-tag-beta">Beta</span>{% endif %}
                 </a>
             </div>
             <div class="nav-cluster">
-                <span id="authStatus" class="text-muted small d-none auth-chip">
-                    <i class="bi bi-person-check-fill text-success me-1"></i>Logged in
-                </span>
-                <button id="themeToggle" class="theme-toggle" type="button"
-                        aria-label="Toggle light or dark mode" title="Toggle light/dark mode"
-                        onclick="toggleTheme()">
-                    <i class="bi bi-moon-stars" aria-hidden="true"></i>
+                <button id="activeQueryBtn" type="button" class="btn btn-sm btn-outline-secondary query-progress-nav d-none" aria-label="Return to the running question">
+                    <span class="spinner-border me-1" aria-hidden="true"></span><span class="query-progress-nav-label">Running question</span>
                 </button>
-                <a href="/docs" class="btn btn-sm btn-outline-secondary" title="Open the user guide">
-                    <i class="bi bi-question-circle me-1" aria-hidden="true"></i><span class="btn-label">Help</span>
-                </a>
-                <a href="/admin" id="adminNavBtn" class="btn btn-sm btn-outline-secondary d-none"
-                   title="Open the admin dashboard">
-                    <i class="bi bi-speedometer2 me-1" aria-hidden="true"></i><span class="btn-label">Admin</span>
-                </a>
+                <a href="/library" class="home-nav-link desktop-nav">Verified library</a>
+                <a href="/docs" class="home-nav-link desktop-nav">How it works</a>
                 <button id="loginBtn" class="btn btn-sm btn-primary" onclick="showLoginModal()" title="Sign in">
-                    <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i><span class="btn-label">Login</span>
+                    Sign in
                 </button>
                 <button id="logoutBtn" class="btn btn-sm btn-outline-secondary d-none" onclick="doLogout()" title="Sign out">
-                    <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i><span class="btn-label">Logout</span>
+                    Sign out
                 </button>
             </div>
         </div>
     </nav>
 
     <!-- Sidebar -->
-    <aside class="sidebar" aria-label="Conversations">
+    <aside class="sidebar" id="conversationSidebar" aria-label="Navigation and conversations" aria-hidden="true" inert>
         <div class="sidebar-inner">
             <button class="btn btn-primary btn-new-chat" id="newChatBtn">
-                <i class="bi bi-plus-lg me-2"></i>New Chat
+                <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>New question
             </button>
 
             <div class="sidebar-search">
@@ -88,91 +81,70 @@
             <div id="chatList" class="chat-list">
                 <!-- Chat history items will be added here -->
             </div>
+            <nav class="sidebar-navigation" aria-label="Explore">
+                <a href="/library"><i class="bi bi-patch-check" aria-hidden="true"></i>Verified library</a>
+                <a href="/dictionary"><i class="bi bi-table" aria-hidden="true"></i>Data dictionary</a>
+                <a href="/docs"><i class="bi bi-question-circle" aria-hidden="true"></i>How it works</a>
+                <a href="/admin" id="adminNavBtn" class="d-none"><i class="bi bi-speedometer2" aria-hidden="true"></i>Admin dashboard</a>
+                <button id="themeToggle" type="button" onclick="toggleTheme()"
+                        aria-label="Toggle light or dark mode" aria-pressed="false">
+                    <i class="bi bi-moon-stars" aria-hidden="true"></i><span>Dark mode</span>
+                </button>
+                <span id="authStatus" class="text-muted small d-none auth-chip"></span>
+            </nav>
         </div>
     </aside>
     <div id="sidebarBackdrop" onclick="closeSidebarMobile()" aria-hidden="true"></div>
 
     <!-- Main Content -->
-    <main class="main-content">
+    <main class="main-content" id="mainContent" tabindex="-1">
         <!-- Landing Page (shown when no chat is active) -->
         <div id="landingPage" class="landing-page">
             <div class="landing-inner text-center">
-                <img src="{{ landing.logo_url }}" alt="{{ landing.title }}" class="dc-logo landing-logo">
-                {% if landing.tagline %}<div class="hero-tagline">{{ landing.tagline }}</div>{% endif %}
+                <img src="{{ landing.logo_url }}" alt="" class="dc-logo landing-logo">
                 <h1>{{ landing.title }}</h1>
+                {% if landing.tagline %}<p class="hero-tagline">{{ landing.tagline }}</p>{% endif %}
                 {% if landing.call_to_action %}
                 <p class="landing-lead">{{ landing.call_to_action }}</p>
                 {% endif %}
 
-                <div class="search-container mb-4">
-                    <form autocomplete="off" role="search" onsubmit="return false;">
-                    <div class="input-group input-group-lg">
-                        <input type="search" class="form-control" id="landingSearchInput"
-                               autocomplete="off" aria-label="Ask a question"
-                               data-lpignore="true" data-1p-ignore data-form-type="other"
-                               placeholder="{{ landing.search_placeholder }}">
-                        <button class="btn btn-primary" type="button" id="landingSearchBtn" aria-label="Submit question">
-                            <i class="bi bi-arrow-right" aria-hidden="true"></i>
-                        </button>
-                    </div>
+                <div class="search-container">
+                    <form id="landingSearchForm" autocomplete="off" role="search">
+                        <div class="input-group input-group-lg">
+                            <input type="search" class="form-control" id="landingSearchInput"
+                                   autocomplete="off" aria-label="Ask a question"
+                                   data-lpignore="true" data-1p-ignore data-form-type="other"
+                                   placeholder="{{ landing.search_placeholder }}">
+                            <button class="btn btn-primary" type="submit" id="landingSearchBtn"
+                                    aria-label="Submit question" disabled>
+                                <i class="bi bi-arrow-up" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </form>
                 </div>
 
-                <!-- Trust strip — Verikan's value props (cited · reproducible · verifiable) -->
-                <div class="trust-strip">
-                    <div class="trust-item">
-                        <i class="bi bi-quote" aria-hidden="true"></i>
-                        <div class="trust-item-label">Cited answers</div>
-                        <div class="trust-item-desc">Every figure traces back to its official source.</div>
+                {% if landing.sample_questions %}
+                <section class="starter-questions" aria-label="Suggested questions">
+                    {% if landing.try_asking_label %}
+                    <p class="landing-eyebrow">{{ landing.try_asking_label }}</p>
+                    {% endif %}
+                    <div class="example-grid">
+                        {% for question in landing.sample_questions[:3] %}
+                        <button class="example-btn" type="button">{{ question }}</button>
+                        {% endfor %}
                     </div>
-                    <div class="trust-item">
-                        <i class="bi bi-journal-code" aria-hidden="true"></i>
-                        <div class="trust-item-label">Reproducible notebooks</div>
-                        <div class="trust-item-desc">Open a Colab-ready notebook and re-run it yourself.</div>
-                    </div>
-                    <div class="trust-item">
-                        <i class="bi bi-patch-check" aria-hidden="true"></i>
-                        <div class="trust-item-label">Independently verifiable</div>
-                        <div class="trust-item-desc">Check the evidence at
-                            <a href="https://typedstandards.org" target="_blank" rel="noopener">typedstandards.org</a>.</div>
-                    </div>
-                </div>
-
-                {% if landing.powered_by_label %}
-                <p class="powered-by mb-4">
-                    Powered by {% if landing.powered_by_url %}<a href="{{ landing.powered_by_url }}" target="_blank" rel="noopener">{{ landing.powered_by_label }}</a>{% else %}{{ landing.powered_by_label }}{% endif %} open data
-                </p>
+                    {% if landing.sample_questions|length > 3 %}
+                    <details class="more-questions">
+                        <summary>More questions</summary>
+                        <div class="example-grid">
+                            {% for question in landing.sample_questions[3:] %}
+                            <button class="example-btn" type="button">{{ question }}</button>
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% endif %}
+                </section>
                 {% endif %}
-
-                {% if landing.try_asking_label %}
-                <div class="landing-eyebrow">{{ landing.try_asking_label }}</div>
-                {% endif %}
-
-                <div class="example-grid">
-                    {% for question in landing.sample_questions %}
-                    <button class="example-btn" type="button">{{ question }}</button>
-                    {% endfor %}
-                </div>
-
-                <!-- Popular verified questions — populated from the verified
-                     library by JS (loadVerifiedSuggestions). Hidden until there
-                     is at least one match; static samples above are the
-                     always-present baseline. -->
-                <div id="verifiedSuggestions" class="verified-suggestions d-none">
-                    <div class="landing-eyebrow">
-                        <i class="bi bi-patch-check-fill text-success me-1" aria-hidden="true"></i>Verified answers — ready instantly
-                    </div>
-                    <div class="example-grid" id="verifiedSuggestionsGrid"></div>
-                </div>
-
-                <div class="mt-4 d-flex flex-wrap gap-2">
-                    <a href="/library" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-patch-check me-1" aria-hidden="true"></i>Browse the verified library
-                    </a>
-                    <a href="/dictionary" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-table me-1" aria-hidden="true"></i>Explore the data dictionary
-                    </a>
-                </div>
             </div>
         </div>
 
@@ -224,27 +196,12 @@
 
         <!-- Footer (landing view only; hidden while a conversation is open) -->
         <footer class="site-footer" id="siteFooter">
-            <div class="site-footer-inner">
-                <div class="footer-brand">
-                    <a href="https://dathere.com" target="_blank" rel="noopener"
-                       class="d-inline-flex align-items-center" aria-label="datHere home">
-                        <img src="/static/images/logo-light.svg" alt="datHere" class="dc-logo footer-logo">
-                    </a>
-                    <p class="footer-tagline">Verikan is built by datHere — data wrangling, redefined.</p>
-                </div>
-                <nav class="footer-links" aria-label="datHere">
-                    <div class="footer-col">
-                        <span class="footer-col-title">Verikan</span>
-                        <a href="/library">Verified Library</a>
-                        <a href="/dictionary">Data Dictionary</a>
-                        <a href="/docs">User Guide</a>
-                        <a href="https://dathere.com/contact/" target="_blank" rel="noopener">Contact <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
-                    </div>
-                </nav>
-            </div>
-            <div class="site-footer-bottom">
-                <span>© 2026 datHere. All rights reserved.</span>
-                <span>The verified Data Concierge</span>
+            <div class="home-footer-inner">
+                <p class="footer-credit">Built by <a href="https://dathere.com" target="_blank" rel="noopener">datHere</a></p>
+                {% if landing.powered_by_label %}
+                <p class="footer-source">Data from {% if landing.powered_by_url %}<a href="{{ landing.powered_by_url }}" target="_blank" rel="noopener">{{ landing.powered_by_label }}</a>{% else %}{{ landing.powered_by_label }}{% endif %}</p>
+                {% endif %}
+                <a href="https://dathere.com/contact/" target="_blank" rel="noopener" class="footer-contact">Contact</a>
             </div>
         </footer>
     </main>
@@ -396,6 +353,8 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/python.min.js"></script>
-    <script src="/static/js/app.js?v=20260819-reviews3"></script>
+    <script src="/static/js/answer-details.js?v=20260915-answers1"></script>
+    <script src="/static/js/query-stream.js?v=20260915-answers1"></script>
+    <script src="/static/js/app.js?v=20260915-answers1"></script>
 </body>
 </html>

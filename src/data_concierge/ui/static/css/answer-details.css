@@ -1,0 +1,71 @@
+/* Answer provenance stays compact until readers open the native disclosure. */
+.answer-evidence {
+    margin-top: 0.9rem;
+    border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--dc-surface-2);
+    color: var(--dc-text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.answer-evidence summary {
+    padding: 0.7rem 0.9rem;
+    cursor: pointer;
+    border-radius: inherit;
+}
+
+.answer-evidence summary::marker { color: var(--dc-text-muted); }
+.answer-evidence summary:hover { background: var(--dc-surface-hover); }
+.answer-evidence-heading { font-weight: 600; color: var(--dc-text-secondary); }
+.answer-evidence-heading > i { margin-right: 0.4rem; }
+.answer-evidence-summary { display: flex; flex-wrap: wrap; gap: 0.15rem 1rem; margin: 0.15rem 0 0 0.95rem; color: var(--dc-text-muted); }
+.answer-evidence-summary > span { min-width: 0; }
+.answer-evidence[open] summary { border-bottom: 1px solid var(--dc-border); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.answer-evidence-body { padding: 0.9rem; }
+.answer-evidence-body h3 { margin: 0 0 0.4rem; font-size: inherit; font-weight: 600; color: var(--dc-text); }
+.answer-evidence-sources { display: flex; flex-direction: column; gap: 0.45rem; margin: 0 0 1rem; padding: 0; list-style: none; }
+.answer-evidence-sources a { color: var(--dc-link); text-decoration: none; }
+.answer-evidence-sources a:hover { text-decoration: underline; }
+.answer-evidence-sources a > i { margin-left: 0.4rem; font-size: 0.7rem; }
+.answer-evidence-description { display: block; color: var(--dc-text-muted); }
+.answer-evidence-missing { margin-bottom: 0.8rem; color: var(--dc-text-muted); }
+.answer-evidence-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem 1.5rem; margin: 0; }
+.answer-evidence-dates dt { color: var(--dc-text-muted); font-weight: 400; }
+.answer-evidence-dates dd { color: var(--dc-text); margin: 0; }
+.answer-evidence-query { margin: 0.8rem 0 0; }
+.answer-evidence-query strong { display: block; font-weight: 400; color: var(--dc-text-muted); }
+.answer-evidence-note { margin: 0.8rem 0 0; padding-top: 0.65rem; border-top: 1px solid var(--dc-border); color: var(--dc-text-muted); font-size: 0.74rem; }
+
+.answer-followups { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.answer-followup {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 40px;
+    max-width: 100%;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius-pill);
+    color: var(--dc-text-secondary);
+    background: var(--dc-surface);
+    font: inherit;
+    font-size: 0.78rem;
+    text-align: left;
+    transition: color var(--dc-dur) var(--dc-ease), background-color var(--dc-dur) var(--dc-ease), border-color var(--dc-dur) var(--dc-ease);
+}
+.answer-followup > i { color: var(--dc-text-muted); font-size: 0.75rem; }
+.answer-followup:hover { color: var(--dc-primary); background: var(--dc-primary-soft); border-color: var(--dc-border-strong); }
+.answer-followup:disabled { opacity: 0.55; cursor: wait; }
+.answer-followup:focus-visible, .answer-evidence summary:focus-visible, .answer-evidence a:focus-visible { outline: 2px solid var(--dc-primary); outline-offset: 3px; }
+
+@media (max-width: 480px) {
+    .answer-evidence-dates { grid-template-columns: minmax(0, 1fr); }
+    .answer-evidence-summary { display: grid; gap: 0.15rem; }
+    .answer-followup { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .answer-followup { transition: none; }
+}

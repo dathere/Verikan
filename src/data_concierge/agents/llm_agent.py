@@ -30,6 +30,7 @@ from data_concierge.core.models import (
     RetrievedData,
     ToolCallSignals,
 )
+from data_concierge.core.query_progress import emit_progress, emit_tool_progress
 
 logger = get_logger(__name__)
 
@@ -804,6 +805,9 @@ class LLMAnalysisAgent(BaseAgent):
         if effective_catalog_url is None:
             effective_catalog_url = _catalog_url_for_url(effective_url)
 
+        source_cfg = self.get_portal_config(effective_site_id) if effective_site_id else {}
+        emit_tool_progress(tool_name, source_cfg.get("name") or "the selected data portal")
+
         try:
             # Semantic search uses Pinecone, not a per-portal HTTP client
             if tool_name == "semantic_search_resources":
@@ -970,6 +974,9 @@ class LLMAnalysisAgent(BaseAgent):
                 "Use search_datasets first and pass a Dataset ID from its results."
             )
 
+        dataset_title = " ".join(str(ds.title or "").split())[:160]
+        if dataset_title:
+            emit_progress("checking_dataset", f"Reading dataset details: {dataset_title}")
         lines = [f"# {ds.title}", f"Dataset ID: `{ds.id}`"]
         if ds.description:
             lines.append(f"\n{ds.description[:800]}")
@@ -1038,6 +1045,9 @@ class LLMAnalysisAgent(BaseAgent):
                 )
             target_url = tabular[0].best_url
             dataset_label = ds.title
+            dataset_title = " ".join(str(ds.title or "").split())[:160]
+            if dataset_title:
+                emit_progress("loading_data", f"Loading records from {dataset_title}")
 
         result = await dcat.load_distribution(target_url, max_rows=limit)
         rows = result["rows"]
@@ -1118,6 +1128,9 @@ class LLMAnalysisAgent(BaseAgent):
             return f"Dataset '{dataset_id}' not found."
 
         pkg = body["result"]
+        dataset_title = " ".join(str(pkg.get("title") or pkg.get("name") or "").split())[:160]
+        if dataset_title:
+            emit_progress("checking_dataset", f"Reading dataset details: {dataset_title}")
         lines = [f"# {pkg.get('title', pkg.get('name'))}"]
         if pkg.get("notes"):
             lines.append(f"\n{pkg['notes'][:600]}")
@@ -1580,6 +1593,9 @@ class LLMAnalysisAgent(BaseAgent):
         """Execute an MCP tool call from the LLM."""
         from data_concierge.mcp.connector import get_mcp_connector
 
+        parts = tool_name.split("__", 2)
+        source_cfg = _STATIC_PORTAL_CONFIGS.get(parts[1], {}) if len(parts) == 3 else {}
+        emit_tool_progress(tool_name, source_cfg.get("name") or "the connected data source")
         connector = get_mcp_connector()
         return await connector.handle_llm_tool_call(tool_name, tool_input)
 
@@ -1635,6 +1651,7 @@ class LLMAnalysisAgent(BaseAgent):
 
         for attempt in range(max_retries):
             try:
+                emit_progress("analyzing", "Analyzing the question and available evidence")
                 return await client.messages.create(
                     model=model,
                     max_tokens=max_tokens,
@@ -1667,6 +1684,7 @@ class LLMAnalysisAgent(BaseAgent):
                             "wait_secs": wait,
                         }
                     )
+                emit_progress("waiting_for_model", "The analysis service is busy; retrying shortly")
                 await asyncio.sleep(wait)
                 wait *= 2  # exponential backoff
 
@@ -1688,6 +1706,7 @@ class LLMAnalysisAgent(BaseAgent):
                     }
                 )
             try:
+                emit_progress("analyzing", "Continuing the analysis with the available service")
                 response = await client.messages.create(
                     model=fallback,
                     max_tokens=max_tokens,
