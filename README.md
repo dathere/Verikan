@@ -20,9 +20,9 @@
 </p>
 
 ---
-## Background 
 
-Verikan was built and used at datHere for about a year before this release. What's here is that same system, now open source under MIT. which is also why some of the tooling has a backlog
+> [!NOTE]
+> Verikan was built and used at datHere with our Western PA partners for a year before this release. What's here is that same system, now open source under MIT. Which is also why some of the tooling has a backlog, and the number of commits does not fully reflect the work done before the release.
 
 ## Why this exists
 
