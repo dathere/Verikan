@@ -126,6 +126,34 @@ cp .env.example .env               # then add your ANTHROPIC_API_KEY
 ./run_web.sh
 ```
 
+<details>
+<summary><b>Prefer <a href="https://docs.astral.sh/uv/">uv</a>?</b></summary>
+
+<br>
+
+`uv.lock` is committed and CI keeps it in sync with `pyproject.toml`, so a clone can be built
+from the exact pinned set instead of resolving fresh:
+
+```bash
+git clone https://github.com/dathere/Verikan.git
+cd Verikan
+
+uv sync --frozen --extra dev       # creates .venv from uv.lock
+cp .env.example .env               # then add your ANTHROPIC_API_KEY
+
+./run_web.sh                       # picks up the .venv uv just created
+```
+
+`--extra dev` matters: the dev toolchain lives in `[project.optional-dependencies]`, which uv
+does **not** install by default. Plain `uv sync --frozen` gives you a runnable app but no
+pytest, ruff or mypy.
+
+Both paths are supported and produce the same app; pip is what CI and the Docker image use. If
+you change a dependency, run `uv lock` and commit the result alongside the `pyproject.toml`
+edit — CI fails if the two disagree.
+
+</details>
+
 Open **<http://localhost:8501>**.
 
 <p align="center">
