@@ -32,6 +32,7 @@ let currentNotebook = null;
 let isAuthenticated = false;
 let _pendingQuery = null;  // Query waiting for login to complete
 let _auth0Enabled = false;
+let _activeQuery = null;
 
 // =============================================================================
 // Theme Toggle
@@ -51,7 +52,9 @@ function toggleTheme() {
 function updateThemeIcon(theme) {
     const btn = document.getElementById('themeToggle');
     const icon = btn ? btn.querySelector('i') : null;
+    const label = btn ? btn.querySelector('span') : null;
     if (icon) icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars';
+    if (label) label.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
     if (btn) btn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
 }
 
@@ -105,10 +108,6 @@ function applySidebar(collapsed) {
 function toggleSidebar() {
     const collapsed = !document.body.classList.contains('sidebar-collapsed');
     applySidebar(collapsed);
-    // Persist desktop preference only; mobile defaults to closed each load.
-    if (!isMobileViewport()) {
-        localStorage.setItem('dc-sidebar', collapsed ? 'collapsed' : 'open');
-    }
 }
 
 // Close the drawer after navigation on small screens.
@@ -117,10 +116,9 @@ function closeSidebarMobile() {
 }
 
 function initSidebar() {
-    const saved = localStorage.getItem('dc-sidebar');
-    // Mobile: always start collapsed. Desktop: honor saved preference (default open).
-    const collapsed = isMobileViewport() ? true : saved === 'collapsed';
-    applySidebar(collapsed);
+    // Every visit starts with the question in focus, including returning users
+    // who saved an open sidebar in an earlier version.
+    applySidebar(true);
 }
 
 // =============================================================================
@@ -192,6 +190,7 @@ const chatTitle = document.getElementById('chatTitle');
 const chatInput = document.getElementById('chatInput');
 const sendBtn = document.getElementById('sendBtn');
 const newChatBtn = document.getElementById('newChatBtn');
+const landingSearchForm = document.getElementById('landingSearchForm');
 const landingSearchInput = document.getElementById('landingSearchInput');
 const landingSearchBtn = document.getElementById('landingSearchBtn');
 
@@ -201,8 +200,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     dedupeChats();
     initSidebar();
     setupEventListeners();
-    // Surface popular verified questions on the landing page (fail-safe).
-    loadVerifiedSuggestions();
     // checkAuthStatus also loads server chats when authenticated
     await checkAuthStatus();
 
@@ -238,13 +235,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             landingPage.classList.remove('d-none');
             chatInterface.classList.add('d-none');
             toggleFooter(true);
+            updateQueryControls();
         }
     });
 });
 
 function setupEventListeners() {
-    // New chat button — return to the landing screen (search box + example
-    // questions + verified suggestions) rather than dropping into an empty chat.
+    document.getElementById('activeQueryBtn')?.addEventListener('click', () => {
+        if (_activeQuery) selectChat(_activeQuery.chatId);
+    });
+
+    // Chat IDs live in the URL hash. Move focus without replacing that deep link.
+    document.querySelector('.skip-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('mainContent').focus();
+    });
+
+    // New chat button returns to the landing search and example questions.
     // The actual chat is created lazily once the user asks a question.
     newChatBtn.addEventListener('click', () => {
         showLandingPage();
@@ -286,6 +293,10 @@ function setupEventListeners() {
             submitFeedback(parseInt(el.dataset.index, 10), el.dataset.rating, el);
         } else if (action === 'ask-verified') {
             if (el.dataset.query) createNewChat(el.dataset.query);
+        } else if (action === 'followup' || action === 'retry-query') {
+            if (el.dataset.question) askFollowUp(el.dataset.question);
+        } else if (action === 'stop-query') {
+            stopActiveQuery();
         } else if (action === 'share') {
             shareVerified(el.dataset.id, el);
         }
@@ -357,19 +368,27 @@ function setupEventListeners() {
         });
     }
 
-    // Landing search
-    landingSearchBtn.addEventListener('click', () => {
+    // Let the form handle both keyboard and button submissions in one place.
+    let landingIsComposing = false;
+    landingSearchInput.addEventListener('compositionstart', () => { landingIsComposing = true; });
+    landingSearchInput.addEventListener('compositionend', () => {
+        landingIsComposing = false;
+        updateLandingSearchButton();
+    });
+    landingSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) {
+            // Accepting an IME candidate must not submit the question.
+            e.preventDefault();
+        }
+    });
+    landingSearchInput.addEventListener('input', updateLandingSearchButton);
+    landingSearchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (landingIsComposing || landingPage.classList.contains('d-none')) return;
         const query = landingSearchInput.value.trim();
-        if (query) {
-            createNewChat(query);
-        }
+        if (query) createNewChat(query);
     });
-    landingSearchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            const query = landingSearchInput.value.trim();
-            if (query) createNewChat(query);
-        }
-    });
+    updateLandingSearchButton();
 
     // Example questions
     document.querySelectorAll('.example-btn').forEach(btn => {
@@ -402,12 +421,22 @@ function setupEventListeners() {
         });
     }
 
-    // Re-evaluate sidebar layout on viewport changes (mobile <-> desktop)
-    window.addEventListener('resize', () => {
-        if (!isMobileViewport() && localStorage.getItem('dc-sidebar') !== 'collapsed') {
-            applySidebar(false);
-        }
+    // Only change drawer state when crossing the breakpoint. Ordinary resize
+    // events (including the mobile keyboard) should leave the user's choice alone.
+    window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
+        applySidebar(true);
     });
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing) return;
+        if (document.body.classList.contains('sidebar-collapsed') || document.querySelector('.modal.show')) return;
+        e.preventDefault();
+        toggleSidebar();
+        document.getElementById('sidebarToggle')?.focus();
+    });
+}
+
+function updateLandingSearchButton() {
+    landingSearchBtn.disabled = !!_activeQuery || !landingSearchInput.value.trim();
 }
 
 // =============================================================================
@@ -542,6 +571,7 @@ async function doLogout() {
 
 // Chat Management
 function createNewChat(initialQuery = null) {
+    if (initialQuery && queryAlreadyRunning()) return;
     const chatId = generateId();
     chats[chatId] = {
         id: chatId,
@@ -576,6 +606,7 @@ function deleteChat(chatId) {
     // is also always visible on touch devices, where a stray tap could land.
     const title = (chats[chatId] && chats[chatId].title) || 'this conversation';
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    if (_activeQuery?.chatId === chatId) stopActiveQuery();
     delete chats[chatId];
     if (currentChatId === chatId) {
         currentChatId = null;
@@ -598,8 +629,14 @@ function showLandingPage() {
     chatInterface.classList.add('d-none');
     toggleFooter(true);
     currentChatId = null;
+    updateQueryControls();
     history.replaceState(null, '', location.pathname);  // clear hash
     renderChatList();
+    landingSearchInput.value = '';
+    updateLandingSearchButton();
+    requestAnimationFrame(() => {
+        if (!landingPage.classList.contains('d-none')) landingSearchInput.focus();
+    });
 }
 
 function showChatInterface() {
@@ -744,7 +781,7 @@ function commitRenameChat(save) {
 // answer is appended below (not replaced) so the user can compare.
 let _isRegenerating = false;
 function regenerateAnswer() {
-    if (_isRegenerating) return;
+    if (_isRegenerating || queryAlreadyRunning()) return;
     const chat = chats[currentChatId];
     if (!chat) return;
     let userQuery = null;
@@ -762,7 +799,7 @@ function regenerateAnswer() {
 // Message Handling
 function sendMessage() {
     const message = chatInput.value.trim();
-    if (!message || !currentChatId) return;
+    if (!message || !currentChatId || queryAlreadyRunning()) return;
 
     chatInput.value = '';
     autoGrowInput();
@@ -874,69 +911,6 @@ function chatToMarkdown(chat) {
     return lines.join('\n');
 }
 
-// Populate the landing page's "verified answers" section from the verified
-// library (notebooks + quick answers). Fail-safe: any error or empty library
-// leaves the section hidden, so the static sample questions remain the
-// baseline. The list endpoints are public and read-only (no usage increment),
-// so this is safe for anonymous and signed-in users alike.
-async function loadVerifiedSuggestions() {
-    const wrap = document.getElementById('verifiedSuggestions');
-    const grid = document.getElementById('verifiedSuggestionsGrid');
-    if (!wrap || !grid) return;
-
-    const norm = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.?!]+$/, '');
-    // Don't repeat questions already shown as static sample buttons.
-    const seen = new Set(
-        Array.from(document.querySelectorAll('.example-grid .example-btn'))
-            .map(b => norm(b.textContent))
-    );
-
-    try {
-        const [nbRes, ansRes] = await Promise.all([
-            fetch(`${API_BASE}/verified-notebooks`).catch(() => null),
-            fetch(`${API_BASE}/verified-answers`).catch(() => null),
-        ]);
-        const items = [];
-        if (nbRes && nbRes.ok) {
-            const d = await nbRes.json();
-            for (const nb of (d.notebooks || [])) {
-                if (nb.query) items.push({ q: nb.query, usage: nb.usage_count || 0 });
-            }
-        }
-        if (ansRes && ansRes.ok) {
-            const d = await ansRes.json();
-            for (const a of (d.answers || [])) {
-                if (a.query) items.push({ q: a.query, usage: a.usage_count || 0 });
-            }
-        }
-        // Most-used first; dedupe by normalized question; cap at 5.
-        items.sort((a, b) => b.usage - a.usage);
-        const picks = [];
-        for (const it of items) {
-            const key = norm(it.q);
-            if (!key || seen.has(key)) continue;
-            seen.add(key);
-            picks.push(it.q);
-            if (picks.length >= 5) break;
-        }
-        if (!picks.length) return;  // nothing new to show — keep section hidden
-
-        grid.innerHTML = '';
-        for (const q of picks) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'example-btn';
-            btn.setAttribute('data-verified', 'true');
-            btn.innerHTML = `<i class="bi bi-patch-check text-success me-1" aria-hidden="true"></i>${escapeHtml(q)}`;
-            btn.addEventListener('click', () => createNewChat(q));
-            grid.appendChild(btn);
-        }
-        wrap.classList.remove('d-none');
-    } catch {
-        // Network/parse error — leave the section hidden; static samples remain.
-    }
-}
-
 function exportCurrentChat() {
     const chat = chats[currentChatId];
     if (!chat || !(chat.messages || []).length) {
@@ -995,7 +969,7 @@ function buildFollowUpContext(query) {
         messages = messages.slice(0, -1);
     }
     const turns = messages
-        .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content && !m.stopped && !m.requiresLogin)
         .slice(-8)
         .map(m => ({ role: m.role, content: String(m.content).substring(0, 4000) }));
     const prev = [...messages].reverse().find(m =>
@@ -1007,57 +981,100 @@ function buildFollowUpContext(query) {
     };
 }
 
+function queryAlreadyRunning() {
+    if (!_activeQuery) return false;
+    showToast('A question is still running. Open the running question to stop it or wait for its answer.');
+    return true;
+}
+
+function updateQueryControls() {
+    const running = !!_activeQuery;
+    sendBtn.disabled = running;
+    updateLandingSearchButton();
+    document.querySelectorAll('[data-action="followup"], [data-action="retry-query"], .starter-questions .example-btn')
+        .forEach(button => { button.disabled = running; });
+    const returnButton = document.getElementById('activeQueryBtn');
+    if (returnButton) returnButton.classList.toggle('d-none', !running || (
+        _activeQuery.chatId === currentChatId && !chatInterface.classList.contains('d-none')
+    ));
+}
+
+function stopActiveQuery() {
+    if (!_activeQuery || _activeQuery.controller.signal.aborted) return;
+    setQueryProgress(_activeQuery, 'stopping', 'Stopping this question…');
+    _activeQuery.controller.abort();
+}
+
+function setQueryProgress(run, stage, message) {
+    if (_activeQuery !== run) return;
+    run.stage = stage;
+    run.message = String(message).slice(0, 240);
+    if (run.history.at(-1) !== run.message) {
+        run.history.push(run.message);
+        if (run.history.length > 80) run.history.shift();
+    }
+    refreshQueryProgress();
+}
+
+function refreshQueryProgress() {
+    const run = _activeQuery;
+    if (!run || run.chatId !== currentChatId) return;
+    const status = document.getElementById('queryProgressStatus');
+    if (status && status.textContent !== run.message) status.textContent = run.message;
+    const elapsed = document.getElementById('queryProgressElapsed');
+    if (elapsed) elapsed.textContent = `${Math.floor((Date.now() - run.startedAt) / 1000)}s elapsed`;
+    const steps = document.getElementById('queryProgressSteps');
+    if (steps && steps.dataset.lastMessage !== run.message) {
+        steps.innerHTML = run.history.map(message => `<li>${escapeHtml(message)}</li>`).join('');
+        steps.dataset.lastMessage = run.message;
+    }
+    const stop = document.querySelector('[data-action="stop-query"]');
+    if (stop) stop.disabled = run.controller.signal.aborted;
+}
+
 async function processQuery(query, isFollowUp = false) {
+    if (_activeQuery || !chats[currentChatId]) return;
     const followCtx = buildFollowUpContext(query);
-    // In an ongoing authenticated chat the server understands the follow-up
-    // (rewriting it or editing the notebook), so the client-side verified
-    // shortcut would misfire on context-dependent wording — skip it and let
-    // the server run its own verified-cache checks on the resolved query.
-    const isChatFollowUp = isAuthenticated && followCtx.conversation !== null;
-
+    // Action buttons ask for a new analysis of the prior result. A similar
+    // saved notebook must not swallow that request, even before sign-in.
+    const isChatFollowUp = isFollowUp || (isAuthenticated && followCtx.conversation !== null);
+    const run = {
+        chatId: currentChatId,
+        controller: new AbortController(),
+        startedAt: Date.now(),
+        stage: 'checking_verified',
+        message: isChatFollowUp ? 'Connecting to the analysis…' : 'Checking saved answers…',
+        history: [],
+    };
+    _activeQuery = run;
+    run.history.push(run.message);
     showTypingIndicator();
-    appendThinking(isChatFollowUp
-        ? "Reading the conversation so far...\n"
-        : "Searching verified notebooks...\n");
-
-    let thinkingInterval = null;
-    let lastThinkingLength = 0;
+    updateQueryControls();
+    // Only elapsed time is clock-driven; all phase changes come from real work.
+    const elapsedTimer = setInterval(refreshQueryProgress, 1000);
+    const signal = run.controller.signal;
 
     try {
-        // First check for verified notebooks (skipped for chat follow-ups)
-        const verifiedResults = isChatFollowUp ? [] : await searchVerifiedNotebooks(query);
-
-        // If we have a high-confidence verified match, use it instead of generating new
+        const verifiedResults = isChatFollowUp ? [] : await searchVerifiedNotebooks(query, signal);
+        signal.throwIfAborted();
         if (verifiedResults.length > 0 && verifiedResults[0].similarity_score >= VERIFIED_SIMILARITY_THRESHOLD) {
             const verifiedMatch = verifiedResults[0];
-            const score = Math.round(verifiedMatch.similarity_score * 100);
-            appendThinking(`Found a verified answer (${score}% match)! Loading details...\n`);
-
-            // Fetch notebook + log in parallel
-            const [verifiedData] = await Promise.all([
-                getVerifiedNotebook(verifiedMatch.notebook_id),
-                fetch(`${API_BASE}/query-log`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        query: query,
-                        source: 'verified_cache',
-                        query_id: verifiedMatch.notebook_id,
-                        similarity_score: verifiedMatch.similarity_score,
-                        verified_query: verifiedMatch.query,
-                        had_notebook: true,
-                        notebook_url: `/api/v1/verified-notebooks/${verifiedMatch.notebook_id}`
-                    })
-                }).catch(e => console.warn('Failed to record verified-cache log', e)),
-                // Minimum display time so the user can read the thinking steps
-                new Promise(r => setTimeout(r, 1200)),
-            ]);
-
-            appendThinking("Done!\n");
-            await new Promise(r => setTimeout(r, 400));
-
-            hideTypingIndicator();
+            setQueryProgress(run, 'loading_verified', 'Loading the saved answer and its sources…');
+            const verifiedData = await getVerifiedNotebook(verifiedMatch.notebook_id, signal);
+            signal.throwIfAborted();
+            // Logging is independent of rendering an already-retrieved answer.
+            fetch(`${API_BASE}/query-log`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query, source: 'verified_cache', query_id: verifiedMatch.notebook_id,
+                    similarity_score: verifiedMatch.similarity_score, verified_query: verifiedMatch.query,
+                    had_notebook: true, notebook_url: `/api/v1/verified-notebooks/${verifiedMatch.notebook_id}`,
+                }),
+            }).catch(() => {});
             addAssistantMessage({
+                ...verifiedData,
+                evidence: verifiedData.evidence || verifiedMatch.evidence,
                 answer: verifiedData.answer || verifiedMatch.answer,
                 confidence: verifiedMatch.similarity_score,
                 notebook: verifiedData.notebook_json,
@@ -1066,94 +1083,35 @@ async function processQuery(query, isFollowUp = false) {
                 verifiedQuery: verifiedMatch.query,
                 similarityScore: verifiedMatch.similarity_score,
                 githubUrl: verifiedData.github_url || null,
-                evidenceVerifyUrl: verifiedData.evidence_verify_url || null
-            });
+                evidenceVerifyUrl: verifiedData.evidence_verify_url || null,
+            }, null, run.chatId);
             return;
         }
-
-        // No verified match — login required to run a new query
         if (!isAuthenticated) {
-            hideTypingIndicator();
             addAssistantMessage({
-                answer: 'You need to **log in** to run new queries. Verified notebooks are available without login.',
-                confidence: 0
-            });
-            showLoginModal(query);
+                answer: 'Sign in to run a new analysis. Saved verified answers are available without signing in.',
+                confidence: 0, requiresLogin: true,
+            }, null, run.chatId);
+            if (currentChatId === run.chatId) showLoginModal(query);
             return;
         }
-
-        // Start polling for thinking updates (simulated for now - will show tool calls)
-        appendThinking(isChatFollowUp
-            ? "Working out whether this updates the previous notebook or needs a fresh analysis...\n\n"
-            : "No verified match found. Running a new analysis...\n\n");
-        let queryStartTime = Date.now();
-        const maxPollTime = 60000; // 60 seconds max
-
-        // Simulated thinking stages for better UX
-        const thinkingStages = [
-            "Searching for relevant datasets...",
-            "Found relevant data, now loading it...",
-            "Analyzing the data to answer your question...",
-            "Preparing the final answer and notebook..."
-        ];
-        let currentStage = 0;
-
-        // Show the first stage immediately
-        appendThinking(thinkingStages[currentStage] + "\n");
-        currentStage++;
-
-        thinkingInterval = setInterval(() => {
-            const elapsed = Date.now() - queryStartTime;
-            // Show stages every 3 seconds
-            if (elapsed > currentStage * 3000 && currentStage < thinkingStages.length) {
-                appendThinking(thinkingStages[currentStage] + "\n");
-                currentStage++;
-            }
-
-            // Stop after max time
-            if (elapsed > maxPollTime && thinkingInterval) {
-                clearInterval(thinkingInterval);
-                thinkingInterval = null;
-            }
-        }, 500);
-
-        // Always use analyze mode with WPRDC data source
-        // The LLM agent handles everything: search, load, analyze, answer
+        setQueryProgress(run, 'connecting', 'Connecting to the analysis…');
         const queryPayload = {
-            query: query,
-            include_notebook: true,
-            include_visualization: true,
-            concierge_mode: 'analyze',
-            data_source: 'wprdc'
+            query, include_notebook: true, include_visualization: true,
+            concierge_mode: 'analyze', data_source: 'wprdc',
         };
-        if (followCtx.conversation && followCtx.conversation.length > 0) {
+        if (followCtx.conversation?.length) {
             queryPayload.conversation = followCtx.conversation;
-            if (followCtx.previousQueryId) {
-                queryPayload.previous_query_id = followCtx.previousQueryId;
-            }
+            if (followCtx.previousQueryId) queryPayload.previous_query_id = followCtx.previousQueryId;
         }
-        const response = await fetch(`${API_BASE}/query`, {
+        const response = await fetch(`${API_BASE}/query/stream`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(queryPayload)
+            headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+            body: JSON.stringify(queryPayload),
+            signal,
         });
-
-        // Clear the thinking interval
-        if (thinkingInterval) {
-            clearInterval(thinkingInterval);
-            thinkingInterval = null;
-        }
-
-        if (!response.ok) {
-            const err = new Error('Query failed with HTTP ' + response.status);
-            err.status = response.status;
-            throw err;
-        }
-
-        const data = await response.json();
-
-        hideTypingIndicator();
-
+        const data = await QueryStream.consume(response, event => setQueryProgress(run, event.stage, event.message), signal);
+        signal.throwIfAborted();
         // Surface server-side suggestions (returned when the analysis failed,
         // timed out, or found no answer) as clickable chips.
         if (Array.isArray(data.suggested_questions) && data.suggested_questions.length > 0) {
@@ -1169,13 +1127,6 @@ async function processQuery(query, isFollowUp = false) {
             data.answer.includes('escalate this')
         );
 
-        // For recommend mode, add suggested follow-up questions
-        // (always using analyze mode with WPRDC, so this is skipped)
-        if (false) {
-            data.isRecommendation = true;
-            data.suggestedQuestions = extractSuggestedQuestions(query, data.answer);
-        }
-
         // If escalation happened, add helpful context and alternative suggestions
         if (isEscalation) {
             data.answer = `I wasn't able to fetch live data for this query (some data sources may require API configuration). However, I can still help!\n\n` +
@@ -1190,19 +1141,16 @@ async function processQuery(query, isFollowUp = false) {
             ];
         }
 
-        addAssistantMessage(data, verifiedResults);
 
+        addAssistantMessage(data, verifiedResults, run.chatId);
     } catch (error) {
-        // Clear the thinking interval on error
-        if (thinkingInterval) {
-            clearInterval(thinkingInterval);
-            thinkingInterval = null;
+        if (signal.aborted) {
+            addAssistantMessage({
+                answer: 'Stopped this question. You can edit your question or try again.',
+                confidence: 0, confidence_level: 'stopped', stopped: true, retryQuery: query,
+            }, null, run.chatId);
+            return;
         }
-
-        hideTypingIndicator();
-
-        // Fail gracefully: never show a raw error to the user. Pick a friendly
-        // explanation for what happened and always recommend alternatives.
         console.error('Query failed:', error);
         const status = error && error.status;
         let friendly;
@@ -1225,15 +1173,22 @@ async function processQuery(query, isFollowUp = false) {
                 'suggestions below.';
         }
 
-        addAssistantMessage({
-            answer: friendly,
-            confidence: 0,
-            suggestedQuestions: extractSuggestedQuestions(query, '')
-        });
 
-        if (status === 401 || status === 403) {
+        addAssistantMessage({
+            answer: friendly, confidence: 0, confidence_level: 'error',
+            suggestedQuestions: extractSuggestedQuestions(query, ''), retryQuery: query,
+        }, null, run.chatId);
+        if ((status === 401 || status === 403) && currentChatId === run.chatId) {
             isAuthenticated = false;
+            updateAuthUI();
             showLoginModal(query);
+        }
+    } finally {
+        clearInterval(elapsedTimer);
+        if (_activeQuery === run) {
+            _activeQuery = null;
+            hideTypingIndicator();
+            updateQueryControls();
         }
     }
 }
@@ -1287,8 +1242,8 @@ function extractSuggestedQuestions(originalQuery, answer) {
     return suggestions.slice(0, 3);
 }
 
-function addAssistantMessage(data, verifiedResults = null) {
-    const chat = chats[currentChatId];
+function addAssistantMessage(data, verifiedResults = null, targetChatId = currentChatId) {
+    const chat = chats[targetChatId];
     if (!chat) return;
 
     chat.messages.push({
@@ -1312,6 +1267,11 @@ function addAssistantMessage(data, verifiedResults = null) {
         isQuickAnswer: data.is_quick_answer || false,
         quickAnswer: data.quick_answer || null,
         sourceLinks: data.source_links || [],
+        evidence: AnswerDetails.normalizeEvidence(data),
+        stopped: !!data.stopped,
+        requiresLogin: !!data.requiresLogin,
+        clarificationNeeded: !!data.clarification_needed,
+        retryQuery: data.retryQuery || null,
         isRevision: data.is_revision || false,
         revisedFromQueryId: data.revised_from_query_id || null,
         // 'verified' marks server-side verified-cache hits, whose queryId has
@@ -1324,7 +1284,7 @@ function addAssistantMessage(data, verifiedResults = null) {
     });
 
     saveChatsToStorage();
-    renderMessages();
+    if (currentChatId === targetChatId) renderMessages();
 
     // The notebook check runs after the answer is returned (#131). Poll for
     // it and refresh the confidence display in place when it lands.
@@ -1481,7 +1441,7 @@ function renderMessages() {
     // Preserve the typing indicator if it exists — renderMessages rebuilds
     // the chat history via innerHTML which would destroy it.
     const typingIndicator = document.getElementById('typingIndicator');
-    const hadIndicator = !!typingIndicator;
+    const hadIndicator = !!typingIndicator && _activeQuery?.chatId === currentChatId;
     if (typingIndicator) typingIndicator.remove();
 
     chatMessages.innerHTML = chat.messages.map((msg, index) => {
@@ -1569,22 +1529,25 @@ function renderMessages() {
                 `;
             }
 
-            // Suggested follow-up questions (for recommendation mode)
+            // Recovery suggestions retain their full wording; successful answers
+            // get a small set of actions built from the question's actual context.
+            const userQuestion = chat.messages.slice(0, index).reverse()
+                .find(message => message.role === 'user')?.content || '';
+            const hasAnswer = !msg.stopped && !msg.requiresLogin
+                && !msg.clarificationNeeded && msg.confidenceLevel !== 'error';
+            const evidenceHtml = hasAnswer
+                ? AnswerDetails.renderEvidence(msg.evidence || AnswerDetails.normalizeEvidence(msg)) : '';
             let suggestedQuestionsHtml = '';
-            if (msg.suggestedQuestions && msg.suggestedQuestions.length > 0) {
-                suggestedQuestionsHtml = `
-                    <div class="suggested-questions mt-3">
-                        <div class="small text-muted mb-2"><i class="bi bi-lightbulb me-1"></i>Try asking:</div>
-                        <div class="d-flex flex-wrap gap-2">
-                            ${msg.suggestedQuestions.map(q => `
-                                <button class="btn btn-sm btn-outline-primary suggested-q-btn" onclick="askFollowUp('${escapeHtml(q).replace(/'/g, "\\'")}')">
-                                    ${escapeHtml(q)}
-                                </button>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
+            if (msg.suggestedQuestions?.length) {
+                suggestedQuestionsHtml = `<div class="suggested-questions mt-3">
+                    <div class="small text-muted mb-2">Try asking:</div>
+                    ${AnswerDetails.renderFollowups(msg.suggestedQuestions.map(query => ({ label: query, query })))}
+                </div>`;
+            } else if (hasAnswer) {
+                suggestedQuestionsHtml = AnswerDetails.renderFollowups(AnswerDetails.followupsFor(msg, userQuestion));
             }
+            const retryHtml = msg.retryQuery
+                ? `<button type="button" class="btn btn-sm btn-outline-primary" data-action="retry-query" data-question="${escapeAttr(msg.retryQuery)}">Try again</button>` : '';
 
             // "People also asked" — the verified search already returned the
             // top-5 matches; the banner shows #1, so surface #2–5 (above the
@@ -1614,26 +1577,6 @@ function renderMessages() {
                 }
             }
 
-            // Quick answer source links
-            let sourceLinksHtml = '';
-            if (msg.isQuickAnswer && msg.sourceLinks && msg.sourceLinks.length > 0) {
-                sourceLinksHtml = `
-                    <div class="source-links mt-2">
-                        <div class="source-links-header">
-                            <i class="bi bi-link-45deg me-1"></i>Sources
-                        </div>
-                        <div class="source-links-list">
-                            ${msg.sourceLinks.map(link => `
-                                <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="source-link-item" title="${escapeHtml(link.description || '')}">
-                                    <i class="bi bi-box-arrow-up-right me-1"></i>
-                                    <span>${escapeHtml(link.name)}</span>
-                                </a>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-            }
-
             // Quick answer submit button — rendered inside the single shared
             // actions row below (two stacked button strips looked broken).
             const quickAnswerSubmitHtml = msg.isQuickAnswer ? `
@@ -1648,12 +1591,13 @@ function renderMessages() {
                         ${revisionBadge}
                         ${verifiedBanner}
                         <div class="message-bubble">${marked.parse(msg.content)}</div>
-                        ${sourceLinksHtml}
+                        ${evidenceHtml}
                         <div class="message-meta">${time} ${confidenceMeta}${msg.isQuickAnswer ? ' · <span class="quick-answer-badge">Quick Answer</span>' : ''}</div>
                         ${confidencePanel}
                         ${suggestedQuestionsHtml}
                         ${peopleAlsoAskedHtml}
                         <div class="message-actions">
+                            ${retryHtml}
                             <button class="btn btn-sm btn-outline-secondary msg-copy-btn"
                                     title="Copy answer" aria-label="Copy answer"
                                     onclick="copyAnswer(${index}, this)">
@@ -1669,7 +1613,7 @@ function renderMessages() {
                             <button type="button" class="btn btn-sm btn-outline-secondary" data-action="share" data-id="${escapeAttr(msg.queryId)}" title="Copy a public link to this verified answer">
                                 <i class="bi bi-share me-1"></i>Share
                             </button>` : ''}
-                            ${(index === chat.messages.length - 1 && msg.role === 'assistant' && !msg.isVerified && !msg.isQuickAnswer) ? `
+                            ${(index === chat.messages.length - 1 && msg.role === 'assistant' && !msg.isVerified && !msg.isQuickAnswer && !msg.stopped && !msg.requiresLogin && !msg.retryQuery) ? `
                             <button class="btn btn-sm btn-outline-secondary" onclick="regenerateAnswer()" title="Re-run this question for a fresh answer">
                                 <i class="bi bi-arrow-clockwise me-1"></i>Regenerate
                             </button>` : ''}
@@ -1696,49 +1640,41 @@ function renderMessages() {
     // Re-attach the typing indicator if it was present before re-render
     if (hadIndicator && typingIndicator) {
         chatMessages.appendChild(typingIndicator);
+    } else if (_activeQuery?.chatId === currentChatId) {
+        showTypingIndicator();
     }
+    updateQueryControls();
 
     // Scroll to bottom (and refresh the jump-to-latest button state)
     scrollMessagesToBottom();
 }
 
 function showTypingIndicator() {
+    if (!_activeQuery || _activeQuery.chatId !== currentChatId) return;
+    hideTypingIndicator();
     const indicator = document.createElement('div');
     indicator.id = 'typingIndicator';
     indicator.className = 'message assistant';
     indicator.innerHTML = `
-        <div class="message-avatar"><i class="bi bi-robot"></i></div>
+        <div class="message-avatar"><i class="bi bi-robot" aria-hidden="true"></i></div>
         <div class="message-content">
-            <div class="message-bubble">
-                <div class="thinking-label" style="font-size: 0.85em; color: var(--dc-text-muted); margin-bottom: 8px;">
-                    <i class="bi bi-lightning-charge-fill"></i> Thinking...
+            <div class="query-progress">
+                <div class="query-progress-heading">
+                    <span class="spinner-border" aria-hidden="true"></span>
+                    <span id="queryProgressStatus" class="query-progress-status" role="status" aria-live="polite"></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary query-progress-stop" data-action="stop-query" aria-label="Stop this question">Stop</button>
                 </div>
-                <div id="thinkingContent" style="font-size: 0.9em; color: var(--dc-text-secondary); line-height: 1.6; max-height: 200px; overflow-y: auto; margin-bottom: 8px; white-space: pre-wrap;"></div>
-                <div class="typing-indicator">
-                    <span></span><span></span><span></span>
-                </div>
+                <div class="query-progress-meta"><span id="queryProgressElapsed"></span></div>
+                <details><summary>Activity</summary><ol id="queryProgressSteps"></ol></details>
             </div>
-        </div>
-    `;
+        </div>`;
     chatMessages.appendChild(indicator);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Function to append thinking text to the indicator
-function appendThinking(text) {
-    const thinkingContent = document.getElementById('thinkingContent');
-    if (thinkingContent) {
-        thinkingContent.textContent += text;
-        // Auto-scroll the thinking content
-        thinkingContent.scrollTop = thinkingContent.scrollHeight;
-        // Also scroll the chat
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
+    refreshQueryProgress();
+    scrollMessagesToBottom();
 }
 
 function hideTypingIndicator() {
-    const indicator = document.getElementById('typingIndicator');
-    if (indicator) indicator.remove();
+    document.getElementById('typingIndicator')?.remove();
 }
 
 // Notebook Functions
@@ -1985,12 +1921,13 @@ async function submitForReview() {
 }
 
 // Verified Notebooks
-async function searchVerifiedNotebooks(query) {
+async function searchVerifiedNotebooks(query, signal) {
     try {
         const response = await fetch(`${API_BASE}/verified-notebooks/search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, threshold: 0.2, max_results: 5 })
+            body: JSON.stringify({ query, threshold: 0.2, max_results: 5 }),
+            signal
         });
 
         if (response.ok) {
@@ -1998,18 +1935,20 @@ async function searchVerifiedNotebooks(query) {
             return data.results || [];
         }
     } catch (error) {
+        if (signal?.aborted) throw error;
         console.error('Verified notebook search error:', error);
     }
     return [];
 }
 
-async function getVerifiedNotebook(notebookId) {
+async function getVerifiedNotebook(notebookId, signal) {
     try {
-        const response = await fetch(`${API_BASE}/verified-notebooks/${notebookId}`);
+        const response = await fetch(`${API_BASE}/verified-notebooks/${notebookId}`, { signal });
         if (response.ok) {
             return await response.json();
         }
     } catch (error) {
+        if (signal?.aborted) throw error;
         console.error('Failed to get verified notebook:', error);
     }
     return {};
@@ -2367,7 +2306,7 @@ function showToast(message, type = 'info') {
 
 // Handle clicking on suggested follow-up questions
 function askFollowUp(question) {
-    if (!currentChatId) return;
+    if (!currentChatId || queryAlreadyRunning()) return;
     addUserMessage(question);
     processQuery(question, true);  // true = isFollowUp, use analyze mode
 }

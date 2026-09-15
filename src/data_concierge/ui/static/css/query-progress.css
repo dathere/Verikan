@@ -1,0 +1,18 @@
+.query-progress { padding: 1rem 1.2rem; border: 1px solid var(--dc-border); border-radius: var(--dc-radius-lg); background: var(--dc-surface); }
+.query-progress-heading { display: flex; align-items: center; gap: 0.65rem; }
+.query-progress-heading > .spinner-border { width: 1rem; height: 1rem; color: var(--dc-primary); border-width: 2px; flex-shrink: 0; }
+.query-progress-status { color: var(--dc-text); font-size: 0.875rem; font-weight: 550; overflow-wrap: anywhere; }
+.query-progress-stop { margin-left: auto; flex-shrink: 0; }
+.query-progress-meta { display: flex; gap: 1rem; margin-top: 0.7rem; color: var(--dc-text-muted); font-size: 0.75rem; }
+.query-progress details { margin-top: 0.7rem; font-size: 0.78rem; color: var(--dc-text-secondary); }
+.query-progress summary { cursor: pointer; width: fit-content; padding: 0.2rem 0; }
+.query-progress summary:focus-visible { outline: 2px solid var(--dc-primary); outline-offset: 2px; }
+.query-progress ol { margin: 0.5rem 0 0; padding-left: 1.2rem; max-height: 160px; overflow: auto; }
+.query-progress li { margin-top: 0.3rem; }
+.query-progress-nav { font-size: 0.75rem; }
+.query-progress-nav .spinner-border { width: 0.75rem; height: 0.75rem; border-width: 2px; }
+@media (max-width: 600px) {
+    .query-progress-nav .query-progress-nav-label { display: none; }
+    .query-progress-heading { gap: 0.5rem; }
+    .query-progress { padding: 0.85rem; }
+}

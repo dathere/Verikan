@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from data_concierge.core.config import settings  # noqa: E402
 from data_concierge.core.logging import get_logger  # noqa: E402
 from data_concierge.gateway.github_webhook import router as github_webhook_router  # noqa: E402
+from data_concierge.gateway.query_stream import router as query_stream_router  # noqa: E402
 from data_concierge.gateway.router import router as gateway_router  # noqa: E402
 from data_concierge.mcp.router import router as mcp_router  # noqa: E402
 
@@ -133,6 +134,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(gateway_router)
+app.include_router(query_stream_router)
 app.include_router(mcp_router)
 app.include_router(github_webhook_router)
 

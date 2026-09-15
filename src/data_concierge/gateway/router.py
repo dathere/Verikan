@@ -18,6 +18,7 @@ from data_concierge.core.logging import get_logger
 from data_concierge.core.models import (
     QueryTier,
 )
+from data_concierge.core.query_progress import emit_progress
 from data_concierge.data_layer.storage import GCSStorage, storage
 from data_concierge.gateway import approved_members as approved_members_store
 from data_concierge.gateway import auth0_client, query_logs
@@ -25,6 +26,12 @@ from data_concierge.gateway import chats as chats_store
 from data_concierge.gateway import ckan_sites as ckan_sites_store
 from data_concierge.gateway import feedback as feedback_store
 from data_concierge.gateway import roles as roles_store
+from data_concierge.gateway.answer_metadata import (
+    AnswerEvidence,
+    attach_notebook_evidence,
+    evidence_from_saved,
+    evidence_from_state,
+)
 from data_concierge.gateway.github_publisher import build_blob_url, load_github_settings
 from data_concierge.gateway.intent_classifier import IntentClassifier, intent_classifier
 from data_concierge.gateway.match_verifier import (
@@ -278,6 +285,7 @@ class QueryResponse(BaseModel):
     tier: str
     intent: str | None = None
     citations: list[dict[str, Any]] = Field(default_factory=list)
+    evidence: AnswerEvidence = Field(default_factory=AnswerEvidence)
     visualization: dict[str, Any] | None = None
     notebook_url: str | None = None
     notebook: dict[str, Any] | None = None
@@ -1458,6 +1466,7 @@ def _build_answer_match(candidate: Any, similarity: float, reason: str | None) -
         "original_query": candidate.query,
         "similarity": similarity,
         "source_links": full.source_links if full else candidate.source_links,
+        "evidence": _verified_answer_evidence(full or candidate),
     }
     if reason:
         result["match_reason"] = reason
@@ -1515,10 +1524,22 @@ def _build_notebook_match(candidate: Any, similarity: float, reason: str | None)
         "answer": candidate.answer,
         "original_query": candidate.query,
         "similarity": similarity,
+        "evidence": evidence_from_saved(
+            get_verified_notebook(candidate.notebook_id) or candidate, reviewed=True
+        ),
     }
     if reason:
         result["match_reason"] = reason
     return result
+
+
+def _verified_answer_evidence(answer: Any) -> AnswerEvidence:
+    """Load only provenance associated with this already-public verified answer."""
+    submission_id = getattr(answer, "submission_id", "")
+    stored = None
+    if isinstance(submission_id, str) and re.fullmatch(r"[A-Za-z0-9-]{8,64}", submission_id):
+        stored = storage.read_json(f"answer_evidence/{submission_id}.json")
+    return evidence_from_saved(answer, reviewed=True, stored_evidence=stored)
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -1558,12 +1579,14 @@ async def process_query_endpoint(
         if request.conversation:
             from data_concierge.gateway.followup import MODE_REVISE, classify_followup
 
+            emit_progress("interpreting", "Understanding your follow-up")
             followup_decision = await classify_followup(
                 request.query,
                 [turn.model_dump() for turn in request.conversation],
                 has_notebook=bool(request.previous_query_id),
             )
             if followup_decision.mode == MODE_REVISE and request.previous_query_id:
+                emit_progress("revising", "Updating the previous notebook")
                 revision_response = await _process_revision(
                     request,
                     http_request,
@@ -1586,6 +1609,7 @@ async def process_query_endpoint(
                     )
 
         # ── Fast path: check verified answers first ──────────────────
+        emit_progress("checking_verified", "Checking reviewed answers and notebooks")
         verified_answer_match = await _check_verified_answer(effective_query)
         if verified_answer_match:
             processing_time_ms = int((time.time() - start_time) * 1000)
@@ -1618,6 +1642,7 @@ async def process_query_endpoint(
                 is_quick_answer=True,
                 quick_answer=verified_answer_match["answer"],
                 source_links=verified_answer_match.get("source_links", []),
+                evidence=verified_answer_match.get("evidence", AnswerEvidence()),
                 processing_time_ms=processing_time_ms,
             )
 
@@ -1653,6 +1678,7 @@ async def process_query_endpoint(
                 confidence_level="verified",
                 tier="tier_1",
                 notebook_url=f"/api/v1/verified-notebooks/{verified_nb_match['notebook_id']}/download",
+                evidence=verified_nb_match.get("evidence", AnswerEvidence()),
                 processing_time_ms=processing_time_ms,
             )
 
@@ -1783,10 +1809,13 @@ async def process_query_endpoint(
             answer = quick_answer_text
 
         # Save notebook to storage (skip for quick answers)
+        evidence = evidence_from_state(final_state, original_query=effective_query)
+        emit_progress("saving", "Preparing your answer and notebook")
         notebook_url = None
         notebook_data = None
         if notebook and request.include_notebook and not is_quick_answer:
             notebook_key = f"{_NOTEBOOKS_PREFIX}/{query_id}.ipynb"
+            attach_notebook_evidence(notebook.notebook_json, evidence)
             storage.write_json(notebook_key, notebook.notebook_json)
             logger.info("Notebook saved", key=notebook_key, filename=notebook.filename)
             notebook_url = f"/api/v1/notebooks/{query_id}"
@@ -1819,7 +1848,7 @@ async def process_query_endpoint(
 
         if is_quick_answer and quick_answer_text and confidence_score > 0.50:
             try:
-                submit_quick_answer(
+                submission = submit_quick_answer(
                     query=effective_query,
                     answer=quick_answer_text,
                     source_links=source_links,
@@ -1828,6 +1857,12 @@ async def process_query_endpoint(
                     confidence=confidence_score,
                     input_tokens=total_input_tokens or None,
                     output_tokens=total_output_tokens or None,
+                )
+                if submission.status == ReviewStatus.PENDING:
+                    evidence.verification_status = "pending"
+                storage.write_json(
+                    f"answer_evidence/{submission.submission_id}.json",
+                    evidence.model_dump(mode="json"),
                 )
                 logger.info(
                     "Auto-submitted quick answer for review",
@@ -1838,7 +1873,7 @@ async def process_query_endpoint(
                 logger.warning("Auto-submit quick answer failed (non-blocking)", error=str(e))
         elif notebook_data and confidence_score > 0.50:
             try:
-                submit_notebook(
+                submission = submit_notebook(
                     query=effective_query,
                     answer=answer,
                     notebook_json=notebook_data,
@@ -1850,6 +1885,8 @@ async def process_query_endpoint(
                     output_tokens=total_output_tokens or None,
                     query_id=query_id,
                 )
+                if submission.status == ReviewStatus.PENDING:
+                    evidence.verification_status = "pending"
                 logger.info(
                     "Auto-submitted notebook for review",
                     query_id=query_id,
@@ -1918,6 +1955,7 @@ async def process_query_endpoint(
             tier=tier.value if tier else "tier_1",
             intent=intent.value if intent else None,
             citations=citations_list,
+            evidence=evidence,
             visualization=viz_dict,
             notebook_url=notebook_url,
             notebook=notebook_data,
@@ -2025,6 +2063,7 @@ def _graceful_error_response(
         confidence=0.0,
         confidence_level="error",
         tier="tier_1",
+        evidence=AnswerEvidence(original_query=query),
         suggested_questions=_alternative_question_suggestions(query),
         processing_time_ms=processing_time_ms,
     )
@@ -2153,6 +2192,14 @@ async def _process_revision(
     answer = edit_result.answer
     notebook_json = edit_result.notebook
 
+    # Editing may change the selected dataset, period, or filters. Do not
+    # carry an old coverage interval or review status onto the edited result.
+    evidence = evidence_from_state(
+        {"tool_call_signals": edit_result.tool_signals},
+        original_query=request.query,
+    )
+    attach_notebook_evidence(notebook_json, evidence)
+    emit_progress("saving", "Saving the updated notebook")
     storage.write_json(f"{_NOTEBOOKS_PREFIX}/{query_id}.ipynb", notebook_json)
     if edit_result.agent_log:
         storage.write_json(
@@ -2264,6 +2311,7 @@ async def _process_revision(
         # notebook_url either way).
         notebook=notebook_json if request.include_notebook else None,
         is_revision=True,
+        evidence=evidence,
         revised_from_query_id=prev_id,
         processing_time_ms=processing_time_ms,
     )
@@ -2899,6 +2947,7 @@ async def list_verified_notebooks() -> dict[str, Any]:
                 "tags": nb.tags,
                 "data_source": nb.data_source,
                 "verified_at": nb.verified_at,
+                "evidence": evidence_from_saved(nb, reviewed=True).model_dump(mode="json"),
                 "verified_by": nb.verified_by,
                 "admin_notes": nb.admin_notes,
                 "submitted_by": nb.submitted_by or "",
@@ -2961,6 +3010,7 @@ async def get_verified_notebook_endpoint(notebook_id: str) -> dict[str, Any]:
             detail=f"Verified notebook {notebook_id} not found",
         )
     payload = notebook.model_dump()
+    payload["evidence"] = evidence_from_saved(notebook, reviewed=True).model_dump(mode="json")
     payload["github_url"] = build_blob_url(notebook.github_path)
     # Surface the Typed Standards verify link once a package has been minted.
     if notebook.evidence_package_hash:
@@ -3227,7 +3277,15 @@ async def search_verified_notebooks_endpoint(
     return {
         "query": request.query,
         "count": len(results),
-        "results": [r.model_dump() for r in results],
+        "results": [
+            {
+                **r.model_dump(),
+                "evidence": evidence_from_saved(
+                    get_verified_notebook(r.notebook_id), reviewed=True
+                ).model_dump(mode="json"),
+            }
+            for r in results
+        ],
     }
 
 
@@ -4180,6 +4238,7 @@ async def list_verified_answers_endpoint() -> dict[str, Any]:
                 "tags": a.tags,
                 "data_source": a.data_source,
                 "verified_at": a.verified_at,
+                "evidence": evidence_from_saved(a, reviewed=True).model_dump(mode="json"),
                 "verified_by": a.verified_by,
                 "submitted_by": a.submitted_by or "",
                 "confidence": a.confidence,
@@ -4206,6 +4265,7 @@ async def get_verified_answer_endpoint(answer_id: str) -> dict[str, Any]:
     # Increment usage count when retrieving
     increment_answer_usage(answer_id)
     payload = answer.model_dump()
+    payload["evidence"] = _verified_answer_evidence(answer).model_dump(mode="json")
     payload["github_url"] = build_blob_url(answer.github_path)
     return payload
 
@@ -4227,7 +4287,15 @@ async def search_verified_answers_endpoint(
     return {
         "query": request.query,
         "count": len(results),
-        "results": [r.model_dump() for r in results],
+        "results": [
+            {
+                **r.model_dump(),
+                "evidence": _verified_answer_evidence(
+                    get_verified_answer(r.answer_id)
+                ).model_dump(mode="json"),
+            }
+            for r in results
+        ],
     }
 
 
