@@ -11,11 +11,22 @@
 - **`pinecone>=5.0.0`, never `pinecone-client`.** The code uses the v3+ `Pinecone` class and the integrated-inference search API; the legacy package does not have them. A "fix" that swaps the dependency back breaks import and search.
 - `ruff` `line-length = 100`.
 
-## Two dependency manifests coexist
-- `pyproject.toml` `[project.optional-dependencies] dev` — what README, CONTRIBUTING and CI all install: `pip install -e ".[dev]"`.
-- `uv.lock` + `[dependency-groups] dev` — present, but nothing in CI or the docs uses uv.
+## Two dependency manifests coexist — keep both current
+- `pip install -e ".[dev]"` (`[project.optional-dependencies] dev`) is the **documented and enforced** path: README, CONTRIBUTING, `.github/workflows/ci.yml` and the `Dockerfile` (`pip install --no-cache-dir .`) all use it. The Dockerfile does not even `COPY uv.lock`.
+- `uv.lock` (+ `[dependency-groups] dev`) is a **maintained, supported** second path for `uv sync --frozen`, even though no doc mentions it and no workflow runs it. Do not assume it is dead: commit `4b7a29f` ("Make a fresh clone actually runnable") deliberately regenerated it because it "was stale: it still pinned a removed dependency and was missing nbclient/ipykernel, so `uv sync --frozen` failed and notebook verification would have had no kernel."
 
-Treat `pip install -e ".[dev]"` as canonical (it is what CI runs); keep `uv.lock` in mind if a dependency change needs to land in both.
+**A dependency change must land in both.** After editing `[project.dependencies]` or the dev extra, run `uv lock` and commit the result.
+
+Check locally with `uv lock --check` — read-only, writes neither the lockfile nor `.venv`.
+
+CI enforces it in the **`lockfile` job — blocking**, a third gate alongside `test`'s `pytest` and `ruff check`. Same rationale as `ruff check`: no backlog, so keeping it clean is free.
+- Its own job, not a step in `test`: the lock does not vary by Python version (so the 3.11/3.12 matrix would check it twice) and the check needs no project install, making it ~15s instead of a full dep install.
+- Changes under `[tool.ruff]`, `[tool.mypy]`, etc. do not invalidate the lock — only dependency metadata does. False positives are unlikely.
+- `.roborev.toml` still lists `uv.lock` in `exclude_patterns`, so the adversarial PR reviewer never reads the file; the gate is the only thing watching it.
+
+`uv sync --frozen --extra dev` is documented in README § "Install and run" as a supported alternative to pip, so the lock now has acknowledged users rather than being a maintained-but-invisible artifact — which is what let it rot the first time.
+
+**`--extra dev` is not optional there.** The dev toolchain is in `[project.optional-dependencies]`, which uv does not install by default; `[dependency-groups] dev` (which uv *does* install) holds only `respx`. Verified empirically: plain `uv sync --frozen` yields a runnable app with `ipykernel` and `respx` but **no pytest, ruff or mypy**, so a contributor set up that way cannot run the suite or the lint gate. `pip install -e ".[dev]"` has no such split.
 
 ## Not a Python dependency
 `qsv` (<https://github.com/dathere/qsv>, same authors) is an external **CLI binary**, not a package — nothing in `pyproject.toml` installs it. `data_layer/qsv_profiling.py` shells out with `asyncio.create_subprocess_exec("qsv", ...)` for three passes behind portal onboarding: `describegpt`, `stats --everything`, `frequency --limit 20`.
