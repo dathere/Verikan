@@ -28,6 +28,7 @@ boundary, or make it a manual script.
 | `ruff format --check` | No — advisory | Pre-existing drift across many files |
 | `mypy src/` | No — advisory | ~90 pre-existing errors, mostly missing annotations |
 | `uv lock --check` | **Yes** | `uv.lock` must match `pyproject.toml` — no backlog, so it's a gate |
+| `docker build` + smoke test | **Yes** | Builds the image and boots it; nothing watched it before, so a base-image bump broke the build for six days |
 
 The advisory job reports so the debt stays visible, but it does not block your pull request.
 Don't add *new* type errors; fixing ones you touch is welcome. **Please don't reformat files
