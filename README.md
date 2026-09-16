@@ -260,7 +260,9 @@ All settings come from `.env` (see [`.env.example`](.env.example)). **Only
 Notebook verification executes generated code. It's contained: a subprocess with a hard
 timeout, a minimal environment allowlist that withholds every credential, shell-escape cells
 skipped, and an egress guard blocking loopback, private, link-local and cloud-metadata
-addresses from inside the kernel. Set `NOTEBOOK_VERIFICATION_ENABLED=false` to turn it off.
+addresses from inside the kernel. To turn it off, pass `NOTEBOOK_VERIFICATION_ENABLED=false`
+in the environment for that run rather than adding it to `.env` — see *Notebook verification
+never completes* under Troubleshooting for why.
 
 </details>
 
@@ -436,8 +438,18 @@ caching is skipped and everything else works.
 <br>
 
 It runs as a background task after the answer is returned, and takes seconds to minutes
-depending on the notebook. Set `NOTEBOOK_VERIFICATION_ENABLED=false` to skip it during
-development.
+depending on the notebook. To skip it, pass the flag for that run:
+
+```bash
+NOTEBOOK_VERIFICATION_ENABLED=false ./run_web.sh
+```
+
+Pass it in the environment, not in `.env`. `core/config.py` sets `env_file=".env"`, and the
+test suite reads the same settings singleton — so a `.env` entry also disables verification
+under `pytest` and fails
+`tests/unit/test_notebook_verifier.py::TestFeatureFlag::test_ships_enabled`, the test that
+pins the shipped default to on. A shell variable applies only to the command you prefix,
+which is what you want here.
 
 </details>
 
