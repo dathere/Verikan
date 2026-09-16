@@ -1,6 +1,8 @@
 # Tech Stack
 
-- Python `>=3.11`; CI matrix 3.11 + 3.12. `target-version = "py311"`, mypy `python_version = "3.11"`. Do not use 3.12+-only syntax.
+- Python `>=3.12`; CI matrix 3.12 + 3.14. `target-version = "py312"`, mypy `python_version = "3.12"`. Do not use 3.13+-only syntax.
+- **3.11 was dropped deliberately.** `tests/unit/test_query_stream.py::test_cancelled_stream_reader_cancels_worker` deadlocks on 3.11 only: `gateway/query_stream.py::query_events` does `worker.cancel()` then `await worker` inside `anyio.CancelScope(shield=True)` in its `finally`, and on 3.11 that shielded await never completes when the *consumer* task is cancelled. Introduced by `fa50bfb` (PR #7). The suite passes on 3.12 and 3.14. If anyone proposes restoring 3.11, that deadlock is the blocker.
+- 3.14 is in the matrix because the Dockerfile ships `python:3.14-slim`. Bump the two together or the deployed interpreter goes untested.
 - FastAPI + uvicorn + Jinja2 templates; Pydantic v2 (`pydantic-settings` for `core/config.py`).
 - LangGraph for agent orchestration; `anthropic` SDK directly (no LangChain LLM wrappers).
 - pandas / numpy for computation; `nbformat` + `nbclient` + `ipykernel` for notebook generation and execution.
@@ -20,7 +22,7 @@
 Check locally with `uv lock --check` — read-only, writes neither the lockfile nor `.venv`.
 
 CI enforces it in the **`lockfile` job — blocking**, a third gate alongside `test`'s `pytest` and `ruff check`. Same rationale as `ruff check`: no backlog, so keeping it clean is free.
-- Its own job, not a step in `test`: the lock does not vary by Python version (so the 3.11/3.12 matrix would check it twice) and the check needs no project install, making it ~15s instead of a full dep install.
+- Its own job, not a step in `test`: the lock does not vary by Python version (so the 3.12/3.14 matrix would check it twice) and the check needs no project install, making it ~15s instead of a full dep install.
 - Changes under `[tool.ruff]`, `[tool.mypy]`, etc. do not invalidate the lock — only dependency metadata does. False positives are unlikely.
 - `.roborev.toml` still lists `uv.lock` in `exclude_patterns`, so the adversarial PR reviewer never reads the file; the gate is the only thing watching it.
 

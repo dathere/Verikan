@@ -26,7 +26,7 @@ review_guidelines = """
 Verikan — a FastAPI + LangGraph service that answers natural-language questions about public
 statistical data and emits a reproducible Jupyter notebook, with citations, for every answer.
 
-Python 3.11, Pydantic v2, ruff (line length 100). `src/data_concierge/ui/web.py` is the real
+Python 3.12, Pydantic v2, ruff (line length 100). `src/data_concierge/ui/web.py` is the real
 entrypoint; `api/main.py` is a secondary REST-only app.
 
 Flag these project-specific defects. They are recurring, they pass tests, and they are the
