@@ -23,7 +23,7 @@ boundary, or make it a manual script.
 
 | Check | Blocking | Notes |
 |---|---|---|
-| `pytest` | **Yes** | Must stay green on 3.11 and 3.12 |
+| `pytest` | **Yes** | Must stay green on 3.12 and 3.14 |
 | `ruff check src/ tests/ scripts/` | **Yes** | Currently clean — please keep it that way |
 | `ruff format --check` | No — advisory | Pre-existing drift across many files |
 | `mypy src/` | No — advisory | ~90 pre-existing errors, mostly missing annotations |

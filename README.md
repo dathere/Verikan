@@ -7,7 +7,7 @@
 **Verikan takes the friction out of turning data into verifiable answers. Ask questions about your data in plain English – the system finds the right dataset – and Verikan enriches it with data from high-value data sources, runs real Python code against it, and explains the results clearly. Every answer is reproducible, citable, independently verifiable, and yours to keep. Over time, this positive feedback loop creates a Knowledgebase of Verified, Evidence-based Answers.**
 
 [![CI](https://github.com/dathere/Verikan/actions/workflows/ci.yml/badge.svg)](https://github.com/dathere/Verikan/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C)](https://langchain-ai.github.io/langgraph/)
@@ -105,7 +105,7 @@ starting over, then puts the revision through the same execution and review pass
 
 ### Prerequisites
 
-- **Python 3.11+**
+- **Python 3.12+**
 - An **Anthropic API key** ([console.anthropic.com](https://console.anthropic.com/))
 
 No other credential is required. The default data source — [WPRDC](https://data.wprdc.org)

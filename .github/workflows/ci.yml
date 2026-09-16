@@ -17,13 +17,16 @@ jobs:
   test:
     name: tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # A deadlocked test otherwise runs to GitHub's 6-hour default; three runs
+    # burned ~14 hours of runner time that way before anyone noticed.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        # 3.11 is the floor (`requires-python`); 3.14 is what the Dockerfile
+        # 3.12 is the floor (`requires-python`); 3.14 is what the Dockerfile
         # ships, so it must stay in the matrix or the deployed interpreter is
         # the one version never tested. Bump both together.
-        python-version: ["3.11", "3.12", "3.14"]
+        python-version: ["3.12", "3.14"]
 
     steps:
       - uses: actions/checkout@v7
@@ -53,6 +56,7 @@ jobs:
   lockfile:
     name: lockfile
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v7
@@ -72,6 +76,7 @@ jobs:
   types:
     name: types & formatting (advisory)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Advisory only. Both checks carry a backlog inherited from before this
     # project was open sourced; they report so the debt stays visible, but they
     # do not block a pull request. See CONTRIBUTING.md.

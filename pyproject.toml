@@ -3,7 +3,7 @@ name = "data-concierge"
 version = "0.1.0"
 description = "Verikan — the verified Data Concierge: citation-backed answers about public statistical data, with a reproducible notebook for every answer"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [
     {name = "datHere"}
@@ -13,8 +13,8 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
 ]
 
 dependencies = [
@@ -90,7 +90,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
@@ -119,7 +119,7 @@ ignore = [
 known-first-party = ["data_concierge"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

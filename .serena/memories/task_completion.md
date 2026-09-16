@@ -4,7 +4,7 @@ Run from the repo root (see the cwd trap in `mem:suggested_commands`):
 
 ```bash
 ruff check src/ tests/ scripts/    # must pass — CI gate
-pytest -q --no-cov                 # must pass on 3.11 and 3.12 — CI gate
+pytest -q --no-cov                 # must pass on 3.12 and 3.14 — CI gate
 ```
 
 Advisory, run on code you touched but do not chase repo-wide:
