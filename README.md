@@ -260,9 +260,8 @@ All settings come from `.env` (see [`.env.example`](.env.example)). **Only
 Notebook verification executes generated code. It's contained: a subprocess with a hard
 timeout, a minimal environment allowlist that withholds every credential, shell-escape cells
 skipped, and an egress guard blocking loopback, private, link-local and cloud-metadata
-addresses from inside the kernel. To turn it off, pass `NOTEBOOK_VERIFICATION_ENABLED=false`
-in the environment for that run rather than adding it to `.env` — see *Notebook verification
-never completes* under Troubleshooting for why.
+addresses from inside the kernel. Set `NOTEBOOK_VERIFICATION_ENABLED=false` to turn it off —
+in `.env` for a persistent local default, or on the command line for a single run.
 
 </details>
 
@@ -444,12 +443,9 @@ depending on the notebook. To skip it, pass the flag for that run:
 NOTEBOOK_VERIFICATION_ENABLED=false ./run_web.sh
 ```
 
-Pass it in the environment, not in `.env`. `core/config.py` sets `env_file=".env"`, and the
-test suite reads the same settings singleton — so a `.env` entry also disables verification
-under `pytest` and fails
-`tests/unit/test_notebook_verifier.py::TestFeatureFlag::test_ships_enabled`, the test that
-pins the shipped default to on. A shell variable applies only to the command you prefix,
-which is what you want here.
+Or set it in `.env` to make it your local default. Either is safe: `tests/conftest.py` sets
+`DATA_CONCIERGE_ENV_FILE=""` before anything imports the settings singleton, so the test suite
+ignores your `.env` and a local override cannot turn it red.
 
 </details>
 
