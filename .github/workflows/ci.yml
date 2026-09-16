@@ -20,7 +20,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        # 3.11 is the floor (`requires-python`); 3.14 is what the Dockerfile
+        # ships, so it must stay in the matrix or the deployed interpreter is
+        # the one version never tested. Bump both together.
+        python-version: ["3.11", "3.12", "3.14"]
 
     steps:
       - uses: actions/checkout@v7
