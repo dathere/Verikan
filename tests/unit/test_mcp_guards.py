@@ -68,9 +68,15 @@ class TestUrlValidation:
             validate_server_url("http://169.254.169.254/", allow_private=True)
 
     def test_ships_locked_down(self) -> None:
-        from data_concierge.core.config import settings
+        """Asserts the declared default, not the live singleton.
 
-        assert settings.mcp_allow_private_urls is False
+        `MCP_ALLOW_PRIVATE_URLS` exists precisely so local development can point
+        at localhost MCP servers, so the one developer most likely to run this
+        suite is the one most likely to have it set.
+        """
+        from data_concierge.core.config import Settings
+
+        assert Settings.model_fields["mcp_allow_private_urls"].default is False
 
 
 class TestSseEndpointPinning:
@@ -133,12 +139,20 @@ class TestGuardHardening:
                 url="http://169.254.169.254/latest/meta-data/",
             )
 
-    def test_model_validator_rejects_on_update_construction(self) -> None:
+    def test_model_validator_rejects_on_update_construction(
+        self, monkeypatch: "pytest.MonkeyPatch"
+    ) -> None:
         """The update path rebuilds the model, so it is covered too."""
         import pytest
         from pydantic import ValidationError
 
+        from data_concierge.core import config
         from data_concierge.mcp.models import MCPServerConfig, MCPTransportType
+
+        # The validator consults the live setting, and MCP_ALLOW_PRIVATE_URLS
+        # exists for local development — pin the default posture so an exported
+        # variable cannot quietly turn this guard test into a failure.
+        monkeypatch.setattr(config.settings, "mcp_allow_private_urls", False)
 
         good = MCPServerConfig(
             id="x", name="x", transport=MCPTransportType.STREAMABLE_HTTP,

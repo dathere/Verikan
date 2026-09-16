@@ -14,7 +14,16 @@ rebinding the module attribute would leave those references pointing at the
 original.
 """
 
+import os
+
 import pytest
+
+# Set before anything imports `data_concierge.core.config`, which builds its
+# `settings` singleton at import time. `.env` feeds every field, so without this
+# the suite inherits whatever a developer happens to have configured locally —
+# which is how a documented `NOTEBOOK_VERIFICATION_ENABLED=false` turned the
+# suite red. Empty means "no env file"; export it to a path to opt back in.
+os.environ.setdefault("DATA_CONCIERGE_ENV_FILE", "")
 
 
 @pytest.fixture(autouse=True, scope="session")

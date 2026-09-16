@@ -46,7 +46,9 @@ jobs:
       # No env vars and no secrets: the suite is hermetic. Every outbound call
       # is mocked, storage is redirected at a temp dir by tests/conftest.py,
       # and the notebook-verification tests get their Jupyter kernel from the
-      # venv's own kernelspec (ipykernel is a dependency).
+      # venv's own kernelspec (ipykernel is a dependency). conftest.py also
+      # sets DATA_CONCIERGE_ENV_FILE="" so a local .env — which core/config.py
+      # reads for every field — cannot change what the suite asserts.
       #
       # Do not add `working-directory` here — mcp/registry.py resolves its
       # config relative to the process cwd, and four tests read it.

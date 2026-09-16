@@ -11,6 +11,7 @@ The generated notebooks include:
 """
 
 import json
+import platform
 from datetime import datetime
 from typing import Any
 
@@ -300,7 +301,10 @@ print("   - search_ckan_packages(query, rows)")
             },
             "language_info": {
                 "name": "python",
-                "version": "3.11",
+                # The interpreter that actually ran this, not a hardcoded one:
+                # the notebook is the deliverable and its provenance has to be
+                # true. A pinned "3.11" outlived support for 3.11 entirely.
+                "version": platform.python_version(),
                 "codemirror_mode": {"name": "ipython", "version": 3},
                 "file_extension": ".py",
                 "mimetype": "text/x-python",
@@ -1287,7 +1291,7 @@ def generate_notebook_from_trace(
         },
         "language_info": {
             "name": "python",
-            "version": "3.11",
+            "version": platform.python_version(),
         },
         "data_concierge": {
             "version": "0.1.0",

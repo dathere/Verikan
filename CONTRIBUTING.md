@@ -13,9 +13,13 @@ pytest
 
 The full local setup — configuration, sign-in, Docker — is in the [README](README.md).
 
-**The test suite is hermetic.** ~640 tests, under a minute, and it needs no API key, no
+**The test suite is hermetic.** ~800 tests, under a minute, and it needs no API key, no
 network and no `.env`: every outbound call is mocked, and a fixture points storage at a
-temporary directory so a run never writes into your checkout. If a change you make can only be
+temporary directory so a run never writes into your checkout. It also *ignores* your `.env` —
+`core/config.py` reads that file for every setting, so `tests/conftest.py` sets
+`DATA_CONCIERGE_ENV_FILE=""` to keep your local configuration out of the run. Assert shipped
+defaults against `Settings.model_fields[...]`, not the live `settings` singleton, which still
+reflects the process environment. If a change you make can only be
 tested with a live key or a running service, the test is at the wrong boundary — mock the
 boundary, or make it a manual script.
 

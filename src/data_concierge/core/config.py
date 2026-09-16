@@ -1,5 +1,6 @@
 """Application configuration using Pydantic Settings."""
 
+import os
 from functools import lru_cache
 from typing import Literal
 
@@ -11,7 +12,12 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # `.env` feeds every field here, so it reaches a test run too: the suite
+        # is otherwise only as hermetic as whatever happens to be in the working
+        # copy's .env, and a developer following the README's own advice to
+        # disable notebook verification turned the suite red. tests/conftest.py
+        # sets this to "" so a run never depends on it. Empty means no file.
+        env_file=os.environ.get("DATA_CONCIERGE_ENV_FILE", ".env") or None,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

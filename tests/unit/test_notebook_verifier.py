@@ -206,10 +206,16 @@ class TestFeatureFlag:
         )
 
     def test_ships_enabled(self) -> None:
-        """Verification is ON (#131) — the egress guard makes it safe."""
-        from data_concierge.core.config import settings
+        """Verification is ON (#131) — the egress guard makes it safe.
 
-        assert settings.notebook_verification_enabled is True
+        Reads the declared default rather than the live `settings` singleton.
+        conftest already keeps `.env` out of a test run, but the singleton also
+        reflects the process environment, so asserting the class default is what
+        makes this independent of the machine it runs on.
+        """
+        from data_concierge.core.config import Settings
+
+        assert Settings.model_fields["notebook_verification_enabled"].default is True
 
     def test_disabled_omits_the_factor_entirely(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When off, no perpetual 'still running' for a check that never runs.
