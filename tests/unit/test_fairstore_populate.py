@@ -97,6 +97,22 @@ async def test_group_rows_follow_portal_page_caps():
     assert [payload["offset"] for _, payload in client.calls] == [0, 2, 4, 5]
 
 
+@pytest.mark.asyncio
+async def test_write_action_recovers_when_gateway_times_out_after_create():
+    resource = {"id": "resource-id", "name": "Created resource"}
+    client = FakeCKAN({"resource_create": {}, "resource_show": resource})
+
+    result = await populate_fairstore._write_action(
+        client,
+        "resource_create",
+        resource,
+        label="resource-id",
+    )
+
+    assert result == resource
+    assert [action for action, _ in client.calls] == ["resource_create", "resource_show"]
+
+
 def _source_client():
     organization = {
         "id": "11111111-1111-4111-8111-111111111111",

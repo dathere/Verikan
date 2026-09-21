@@ -357,10 +357,30 @@ def _assert_no_collisions(
 async def _write_action(
     client: CKANClient, action: str, payload: dict[str, Any], *, label: str
 ) -> dict[str, Any]:
-    result = await client.action(action, payload)
-    if not result:
-        raise MirrorError(f"{action} failed for {label}")
-    return result
+    show_actions = {
+        "organization_create": "organization_show",
+        "group_create": "group_show",
+        "package_create": "package_show",
+        "resource_create": "resource_show",
+    }
+    for attempt in range(3):
+        result = await client.action(action, payload)
+        if result:
+            return result
+
+        # A gateway can time out after CKAN commits the object. Resolve by the
+        # preserved UUID before retrying so a successful write is not treated
+        # as a failed duplicate create.
+        show_action = show_actions.get(action)
+        if show_action and payload.get("id"):
+            existing = await client.action(show_action, {"id": payload["id"]})
+            if existing:
+                return existing
+
+        if attempt < 2:
+            await asyncio.sleep(2**attempt)
+
+    raise MirrorError(f"{action} failed for {label}")
 
 
 def _resource_payload(
