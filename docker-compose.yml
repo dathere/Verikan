@@ -82,7 +82,10 @@ services:
   # ---------------------------------------------------------------------
   fairstore:
     profiles: ["fairstore"]
-    image: ckan/ckan-dev:2.10
+    build:
+      context: ./docker/fairstore
+      dockerfile: Dockerfile
+    image: data-concierge-fairstore:2.11.3
     platform: linux/amd64
     depends_on:
       fairstore-db:
@@ -90,7 +93,7 @@ services:
       fairstore-solr:
         condition: service_started
     ports:
-      - "5001:5000"
+      - "${FAIRSTORE_PORT:-5001}:5000"
     environment:
       - CKAN_SITE_URL=http://localhost:5000
       # Credentials must match the users the postgres image's init scripts
@@ -100,18 +103,12 @@ services:
       - CKAN_DATASTORE_WRITE_URL=postgresql://ckan_datastore_write:datastore@fairstore-db/datastore
       - CKAN_DATASTORE_READ_URL=postgresql://ckan_datastore_read:datastore@fairstore-db/datastore
       - CKAN_SOLR_URL=http://fairstore-solr:8983/solr/ckan
-      - CKAN__PLUGINS=envvars datastore
+      # hierarchy_display must load before hierarchy_form. Organizations that
+      # represent source portals can then be parents of the organizations
+      # mirrored from those portals.
+      - CKAN__PLUGINS=envvars datastore hierarchy_display hierarchy_form
     volumes:
       - fairstore_data:/var/lib/ckan
-    # The published ckan-dev:2.10 start script hardcodes the server binary as
-    # /usr/local/bin/ckan, but the image installs it at /usr/bin/ckan, so the
-    # dev server exits 127 in a loop. The prerun (config, db init) uses the
-    # binary via PATH and works; only that final line is wrong. Symlink the
-    # expected path, then hand off to the stock start script unchanged.
-    entrypoint:
-      - /bin/sh
-      - -c
-      - "ln -sf /usr/bin/ckan /usr/local/bin/ckan && exec /srv/app/start_ckan_development.sh"
     restart: unless-stopped
 
   fairstore-db:
@@ -135,7 +132,7 @@ services:
 
   fairstore-solr:
     profiles: ["fairstore"]
-    image: ckan/ckan-solr:2.10-solr9
+    image: ckan/ckan-solr:2.11-solr9
     platform: linux/amd64
     volumes:
       - fairstore_solr:/var/solr

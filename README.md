@@ -358,6 +358,38 @@ examples/                    # Sample generated notebooks
 
 ---
 
+## CKAN Fair Store mirror
+
+Start the local CKAN 2.11 Fair Store with organization hierarchy support:
+
+```bash
+docker compose --profile fairstore up -d --build fairstore
+```
+
+Preview a registered CKAN portal before writing anything:
+
+```bash
+python -m scripts.populate_fairstore \
+  --site wprdc \
+  --target-url http://localhost:5001
+```
+
+To apply the mirror, create a target CKAN sysadmin token, expose it through
+`CKAN_API_KEY` (or a protected file), and add `--apply`. The command performs a
+collision preflight first, then preserves source organization, dataset, and
+resource names and UUIDs. It creates one parent organization for the source
+portal, attaches source organizations beneath it, and adds any matching qsv
+profile to the resource as separate metadata. Re-running patches the preserved
+UUIDs, so it does not duplicate resources.
+
+```bash
+python -m scripts.populate_fairstore \
+  --site wprdc \
+  --target-url http://localhost:5001 \
+  --api-key-file /path/to/protected-token \
+  --apply
+```
+
 ## Development
 
 ```bash
