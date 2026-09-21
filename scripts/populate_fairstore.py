@@ -315,7 +315,14 @@ def _assert_no_collisions(
     )
     if root_existing and str(root_existing.get("id")) != store_id:
         collisions.append(f"source-store organization {store_name!r} already exists")
-    check("organization", source["organizations"], target["organizations"])
+    if any(str(row.get("id")) == store_id for row in source["organizations"]):
+        collisions.append(f"source organization UUID {store_id!r} matches the source-store UUID")
+    # A prior run may have used the bare site ID for the synthetic root. It is
+    # renamed before source organizations are written, so exclude it here.
+    target_organizations = [
+        row for row in target["organizations"] if str(row.get("id")) != store_id
+    ]
+    check("organization", source["organizations"], target_organizations)
     # CKAN group/category names are site-wide. Reuse an existing category with
     # the same name instead of rewriting it with another portal's UUID.
     check("group", source["groups"], target["groups"], allow_shared_name=True)
@@ -409,6 +416,8 @@ async def mirror_catalog(
     source_data = await _source_snapshot(source, organization=organization, limit=limit)
     target_data = await _target_snapshot(target)
     store_name = _slug(site_id, "source-store")
+    if store_name in {str(row.get("name")) for row in source_data["organizations"]}:
+        store_name = _slug(f"{store_name}-source", "source-store")
     store_id = str(uuid.uuid5(uuid.NAMESPACE_URL, source_url.rstrip("/")))
     _assert_no_collisions(source_data, target_data, store_name=store_name, store_id=store_id)
 

@@ -242,6 +242,32 @@ async def test_mirror_supplies_description_when_source_notes_are_blank():
     assert dataset["notes"] == "No description was provided by the source catalog."
 
 
+@pytest.mark.asyncio
+async def test_source_store_slug_does_not_replace_same_named_source_organization():
+    source, _organization, _package = _source_client()
+    source_url = "https://source.example"
+    root_id = str(
+        populate_fairstore.uuid.uuid5(populate_fairstore.uuid.NAMESPACE_URL, source_url)
+    )
+    target = FakeCKAN(
+        {
+            "organization_list": [{"id": root_id, "name": "source-publisher"}],
+            "group_list": [],
+            "package_search": {"count": 0, "results": []},
+        }
+    )
+
+    summary = await populate_fairstore.mirror_catalog(
+        source=source,
+        target=target,
+        site_id="source-publisher",
+        site_title="Source Publisher",
+        source_url=source_url,
+    )
+
+    assert summary["store_organization"] == "source-publisher-source"
+
+
 def test_preflight_rejects_dataset_name_collision_but_reuses_group_category():
     source = {
         "organizations": [],
