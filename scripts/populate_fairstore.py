@@ -210,12 +210,31 @@ async def _all_packages(client: CKANClient) -> list[dict[str, Any]]:
             return packages
 
 
+async def _all_group_rows(client: CKANClient, action_name: str) -> list[dict[str, Any]]:
+    """Read every organization or group despite portal-side page-size caps."""
+    rows: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    offset = 0
+    while True:
+        result = await client.action(
+            action_name,
+            {"all_fields": True, "limit": 1000, "offset": offset},
+        )
+        batch = list(result) if isinstance(result, list) else []
+        if not batch:
+            return rows
+        new_rows = [row for row in batch if str(row.get("id")) not in seen_ids]
+        if not new_rows:
+            return rows
+        rows.extend(new_rows)
+        seen_ids.update(str(row.get("id")) for row in new_rows)
+        offset += len(batch)
+
+
 async def _source_snapshot(
     client: CKANClient, *, organization: str | None = None, limit: int | None = None
 ) -> dict[str, list[dict[str, Any]]]:
-    organization_rows = await client.action(
-        "organization_list", {"all_fields": True, "include_dataset_count": True}
-    )
+    organization_rows = await _all_group_rows(client, "organization_list")
     organizations: list[dict[str, Any]] = []
     for row in organization_rows if isinstance(organization_rows, list) else []:
         if organization and row.get("name") != organization:
@@ -232,8 +251,7 @@ async def _source_snapshot(
         )
         organizations.append(full or row)
 
-    group_rows = await client.action("group_list", {"all_fields": True})
-    groups = list(group_rows) if isinstance(group_rows, list) else []
+    groups = await _all_group_rows(client, "group_list")
 
     packages = await _all_packages(client)
     if organization:
@@ -257,8 +275,8 @@ async def _source_snapshot(
 
 
 async def _target_snapshot(client: CKANClient) -> dict[str, list[dict[str, Any]]]:
-    organizations = await client.action("organization_list", {"all_fields": True})
-    groups = await client.action("group_list", {"all_fields": True})
+    organizations = await _all_group_rows(client, "organization_list")
+    groups = await _all_group_rows(client, "group_list")
     packages = await _all_packages(client)
     return {
         "organizations": list(organizations) if isinstance(organizations, list) else [],
@@ -297,7 +315,14 @@ def _assert_no_collisions(
     )
     if root_existing and str(root_existing.get("id")) != store_id:
         collisions.append(f"source-store organization {store_name!r} already exists")
-    check("organization", source["organizations"], target["organizations"])
+    if any(str(row.get("id")) == store_id for row in source["organizations"]):
+        collisions.append(f"source organization UUID {store_id!r} matches the source-store UUID")
+    # A prior run may have used the bare site ID for the synthetic root. It is
+    # renamed before source organizations are written, so exclude it here.
+    target_organizations = [
+        row for row in target["organizations"] if str(row.get("id")) != store_id
+    ]
+    check("organization", source["organizations"], target_organizations)
     # CKAN group/category names are site-wide. Reuse an existing category with
     # the same name instead of rewriting it with another portal's UUID.
     check("group", source["groups"], target["groups"], allow_shared_name=True)
@@ -332,10 +357,30 @@ def _assert_no_collisions(
 async def _write_action(
     client: CKANClient, action: str, payload: dict[str, Any], *, label: str
 ) -> dict[str, Any]:
-    result = await client.action(action, payload)
-    if not result:
-        raise MirrorError(f"{action} failed for {label}")
-    return result
+    show_actions = {
+        "organization_create": "organization_show",
+        "group_create": "group_show",
+        "package_create": "package_show",
+        "resource_create": "resource_show",
+    }
+    for attempt in range(3):
+        result = await client.action(action, payload)
+        if result:
+            return result
+
+        # A gateway can time out after CKAN commits the object. Resolve by the
+        # preserved UUID before retrying so a successful write is not treated
+        # as a failed duplicate create.
+        show_action = show_actions.get(action)
+        if show_action and payload.get("id"):
+            existing = await client.action(show_action, {"id": payload["id"]})
+            if existing:
+                return existing
+
+        if attempt < 2:
+            await asyncio.sleep(2**attempt)
+
+    raise MirrorError(f"{action} failed for {label}")
 
 
 def _resource_payload(
@@ -391,6 +436,8 @@ async def mirror_catalog(
     source_data = await _source_snapshot(source, organization=organization, limit=limit)
     target_data = await _target_snapshot(target)
     store_name = _slug(site_id, "source-store")
+    if store_name in {str(row.get("name")) for row in source_data["organizations"]}:
+        store_name = _slug(f"{store_name}-source", "source-store")
     store_id = str(uuid.uuid5(uuid.NAMESPACE_URL, source_url.rstrip("/")))
     _assert_no_collisions(source_data, target_data, store_name=store_name, store_id=store_id)
 
@@ -517,6 +564,8 @@ async def mirror_catalog(
             source_url=source_url,
             source_id=package_id,
         )
+        if not str(payload.get("notes") or "").strip():
+            payload["notes"] = "No description was provided by the source catalog."
         if not owner_org:
             payload["extras"].append({"key": "mirror_source_owner_org", "value": ""})
         exists = package_id in target_package_ids

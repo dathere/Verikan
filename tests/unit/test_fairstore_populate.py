@@ -81,6 +81,38 @@ class FakeCKAN:
         return response(payload or {}) if callable(response) else response
 
 
+@pytest.mark.asyncio
+async def test_group_rows_follow_portal_page_caps():
+    rows = [{"id": str(index), "name": f"publisher-{index}"} for index in range(5)]
+
+    def capped_page(payload):
+        offset = payload.get("offset", 0)
+        return rows[offset : offset + 2]
+
+    client = FakeCKAN({"organization_list": capped_page})
+
+    result = await populate_fairstore._all_group_rows(client, "organization_list")
+
+    assert result == rows
+    assert [payload["offset"] for _, payload in client.calls] == [0, 2, 4, 5]
+
+
+@pytest.mark.asyncio
+async def test_write_action_recovers_when_gateway_times_out_after_create():
+    resource = {"id": "resource-id", "name": "Created resource"}
+    client = FakeCKAN({"resource_create": {}, "resource_show": resource})
+
+    result = await populate_fairstore._write_action(
+        client,
+        "resource_create",
+        resource,
+        label="resource-id",
+    )
+
+    assert result == resource
+    assert [action for action, _ in client.calls] == ["resource_create", "resource_show"]
+
+
 def _source_client():
     organization = {
         "id": "11111111-1111-4111-8111-111111111111",
@@ -195,6 +227,61 @@ async def test_mirror_preserves_source_identity_and_adds_hierarchy_and_qsv():
     assert resource["qsv_description"] == "Generated profile"
     assert resource["row_count"] == 9
     assert "datastore_active" not in resource
+
+
+@pytest.mark.asyncio
+async def test_mirror_supplies_description_when_source_notes_are_blank():
+    source, _organization, package = _source_client()
+    package["notes"] = ""
+    target = FakeCKAN(
+        {
+            "organization_list": [],
+            "group_list": [],
+            "package_search": {"count": 0, "results": []},
+            "organization_create": lambda payload: payload,
+            "organization_patch": lambda payload: payload,
+            "package_create": lambda payload: payload,
+            "resource_create": lambda payload: payload,
+        }
+    )
+
+    await populate_fairstore.mirror_catalog(
+        source=source,
+        target=target,
+        site_id="source-store",
+        site_title="Source Store",
+        source_url="https://source.example",
+        apply=True,
+    )
+
+    dataset = next(payload for action, payload in target.calls if action == "package_create")
+    assert dataset["notes"] == "No description was provided by the source catalog."
+
+
+@pytest.mark.asyncio
+async def test_source_store_slug_does_not_replace_same_named_source_organization():
+    source, _organization, _package = _source_client()
+    source_url = "https://source.example"
+    root_id = str(
+        populate_fairstore.uuid.uuid5(populate_fairstore.uuid.NAMESPACE_URL, source_url)
+    )
+    target = FakeCKAN(
+        {
+            "organization_list": [{"id": root_id, "name": "source-publisher"}],
+            "group_list": [],
+            "package_search": {"count": 0, "results": []},
+        }
+    )
+
+    summary = await populate_fairstore.mirror_catalog(
+        source=source,
+        target=target,
+        site_id="source-publisher",
+        site_title="Source Publisher",
+        source_url=source_url,
+    )
+
+    assert summary["store_organization"] == "source-publisher-source"
 
 
 def test_preflight_rejects_dataset_name_collision_but_reuses_group_category():
