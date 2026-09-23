@@ -186,7 +186,9 @@ def _extract_qsv_tags(qsv_data: dict) -> list[str]:
         if isinstance(val, dict):
             resp = val.get("response", val)
             if isinstance(resp, dict):
-                raw = resp.get("tags", [])
+                # describegpt capitalises the key in some responses
+                # ({"Attribution": ..., "Tags": [...]}).
+                raw = next((v for k, v in resp.items() if str(k).lower() == "tags"), [])
             else:
                 raw = resp
             if isinstance(raw, str):

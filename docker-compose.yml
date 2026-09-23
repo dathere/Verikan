@@ -76,8 +76,9 @@ services:
   # then open http://localhost:5001 (host 5001 -> container 5000; macOS
   # reserves 5000 for AirPlay).
   #
-  # First run: create an admin and an API token with
-  #     docker compose exec fairstore ckan -c /srv/app/ckan.ini sysadmin add admin
+  # First run: create a sysadmin and an API token (commands under "CKAN Fair
+  # Store mirror" in README.md), load every registered portal with
+  #     python -m scripts.populate_fairstore --site all --apply
   # then set CKAN_URL / CKAN_API_KEY for the app.
   # ---------------------------------------------------------------------
   fairstore:
@@ -85,28 +86,48 @@ services:
     build:
       context: ./docker/fairstore
       dockerfile: Dockerfile
-    image: data-concierge-fairstore:2.11.3
+    image: data-concierge-fairstore:2.11.6
     platform: linux/amd64
     depends_on:
       fairstore-db:
         condition: service_healthy
       fairstore-solr:
         condition: service_started
+      fairstore-redis:
+        condition: service_started
     ports:
       - "${FAIRSTORE_PORT:-5001}:5000"
     environment:
-      - CKAN_SITE_URL=http://localhost:5000
+      # The URL browsers reach CKAN at. CKAN builds upload and DataStore dump
+      # links from it, so it must be the host port, not the container's 5000.
+      - CKAN_SITE_URL=http://localhost:${FAIRSTORE_PORT:-5001}
       # Credentials must match the users the postgres image's init scripts
       # create (see fairstore-db below): ckan / ckan_datastore_write /
       # ckan_datastore_read.
-      - CKAN_SQLALCHEMY_URL=postgresql://ckan:ckan@fairstore-db/ckan
-      - CKAN_DATASTORE_WRITE_URL=postgresql://ckan_datastore_write:datastore@fairstore-db/datastore
-      - CKAN_DATASTORE_READ_URL=postgresql://ckan_datastore_read:datastore@fairstore-db/datastore
+      - CKAN_SQLALCHEMY_URL=postgresql://ckan:${FAIRSTORE_DB_PASSWORD:-ckan}@fairstore-db/ckan
+      - CKAN_DATASTORE_WRITE_URL=postgresql://ckan_datastore_write:${FAIRSTORE_DATASTORE_PASSWORD:-datastore}@fairstore-db/datastore
+      - CKAN_DATASTORE_READ_URL=postgresql://ckan_datastore_read:${FAIRSTORE_DATASTORE_PASSWORD:-datastore}@fairstore-db/datastore
       - CKAN_SOLR_URL=http://fairstore-solr:8983/solr/ckan
+      - CKAN_REDIS_URL=redis://fairstore-redis:6379/1
+      # Pins the session and API-token signing secrets (docker/fairstore/
+      # pin-secrets.sh). Unset, each new container signs with fresh random
+      # secrets and every issued API token stops working.
+      - CKAN_SECRET_KEY=${FAIRSTORE_SECRET_KEY:-}
       # hierarchy_display must load before hierarchy_form. Organizations that
       # represent source portals can then be parents of the organizations
       # mirrored from those portals.
-      - CKAN__PLUGINS=envvars datastore hierarchy_display hierarchy_form
+      - CKAN__PLUGINS=envvars datastore datatables_view text_view image_view hierarchy_display hierarchy_form
+      # qsv profiles (stats, frequency, data dictionary) are DataStore tables,
+      # shown as sortable tables; describegpt's JSON output is shown inline.
+      - CKAN__VIEWS__DEFAULT_VIEWS=datatables_view text_view image_view
+      # The 2.11.6 image's ckan.ini sets ckan.uploads_enabled to an empty
+      # value, which turns file uploads off in the web forms.
+      - CKAN__UPLOADS_ENABLED=true
+      # CKAN exempts extension endpoints (the DataStore dictionary editor, the
+      # DataTables AJAX feed) from CSRF checks by default, and SameSite=Lax
+      # does not cover them here: sslip.io is not a public suffix, so every
+      # other *.sslip.io site counts as same-site.
+      - CKAN__CSRF_PROTECTION__IGNORE_EXTENSIONS=false
     volumes:
       - fairstore_data:/var/lib/ckan
     restart: unless-stopped
@@ -119,8 +140,11 @@ services:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${FAIRSTORE_POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=postgres
+      # Read by init-db.sh on first start; must match the URLs above.
+      - CKAN_DB_PASSWORD=${FAIRSTORE_DB_PASSWORD:-ckan}
+      - DATASTORE_DB_PASSWORD=${FAIRSTORE_DATASTORE_PASSWORD:-datastore}
     volumes:
       - fairstore_db:/var/lib/postgresql/data
       - ./docker/fairstore/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
@@ -136,6 +160,13 @@ services:
     platform: linux/amd64
     volumes:
       - fairstore_solr:/var/solr
+    restart: unless-stopped
+
+  # CKAN 2.11 logs a critical error on every start without Redis, and its
+  # background jobs queue lives there.
+  fairstore-redis:
+    profiles: ["fairstore"]
+    image: redis:7-alpine
     restart: unless-stopped
 
   # Optional: Redis for caching (uncomment if needed)
