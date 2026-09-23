@@ -6,16 +6,20 @@
 # plain Postgres and creates exactly the users and databases CKAN needs here.
 # Runs once, on an empty data directory.
 #
-# Local-only credentials. A deployed Fair Store needs real secrets (see the
-# real secrets managed outside this repo).
+# Passwords come from CKAN_DB_PASSWORD / DATASTORE_DB_PASSWORD. The defaults
+# are local-only; a deployed Fair Store sets real ones (deploy/fairstore).
+# They are passed as psql variables and quoted by psql (:'var'), not spliced
+# into the SQL by the shell.
 set -e
 
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-SQL
-    CREATE USER ckan WITH PASSWORD 'ckan';
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" \
+    -v ckan_pw="${CKAN_DB_PASSWORD:-ckan}" \
+    -v datastore_pw="${DATASTORE_DB_PASSWORD:-datastore}" <<-SQL
+    CREATE USER ckan WITH PASSWORD :'ckan_pw';
     CREATE DATABASE ckan OWNER ckan;
 
-    CREATE USER ckan_datastore_write WITH PASSWORD 'datastore';
-    CREATE USER ckan_datastore_read WITH PASSWORD 'datastore';
+    CREATE USER ckan_datastore_write WITH PASSWORD :'datastore_pw';
+    CREATE USER ckan_datastore_read WITH PASSWORD :'datastore_pw';
     CREATE DATABASE datastore OWNER ckan_datastore_write;
 SQL
 

@@ -322,38 +322,37 @@ def parse_dataset(raw: dict[str, Any]) -> DCATDataset:
     )
 
 
-def parse_catalog(body: Any, catalog_url: str) -> DCATCatalog:
-    """Parse a catalog document into :class:`DCATCatalog`.
+def raw_dataset_nodes(body: Any) -> list[dict[str, Any]]:
+    """Return the unparsed dataset nodes of a catalog document.
 
     Handles the three shapes seen in the wild: DCAT-US 1.1 (``{"dataset": [...]}``),
     a bare JSON-LD array of nodes, and a JSON-LD document with ``@graph``.
     """
-    raw_datasets: list[dict[str, Any]] = []
-    title = ""
-
     if isinstance(body, dict):
-        title = _text(body.get("title"))
         if isinstance(body.get("dataset"), list):
-            raw_datasets = [d for d in body["dataset"] if isinstance(d, dict)]
-        elif isinstance(body.get("@graph"), list):
-            raw_datasets = [
+            return [d for d in body["dataset"] if isinstance(d, dict)]
+        if isinstance(body.get("@graph"), list):
+            return [
                 node
                 for node in body["@graph"]
                 if isinstance(node, dict) and "Dataset" in str(node.get("@type", ""))
             ]
-    elif isinstance(body, list):
-        raw_datasets = [
+        return []
+    if isinstance(body, list):
+        typed = [
             node
             for node in body
             if isinstance(node, dict) and "Dataset" in str(node.get("@type", ""))
         ]
-        if not raw_datasets:
-            # A plain array of dataset objects with no @type annotation.
-            raw_datasets = [
-                node for node in body if isinstance(node, dict) and node.get("title")
-            ]
+        # A plain array of dataset objects with no @type annotation.
+        return typed or [node for node in body if isinstance(node, dict) and node.get("title")]
+    return []
 
-    datasets = [parse_dataset(node) for node in raw_datasets]
+
+def parse_catalog(body: Any, catalog_url: str) -> DCATCatalog:
+    """Parse a catalog document into :class:`DCATCatalog`."""
+    title = _text(body.get("title")) if isinstance(body, dict) else ""
+    datasets = [parse_dataset(node) for node in raw_dataset_nodes(body)]
     # Drop entries with neither a title nor an identifier — nothing to cite.
     datasets = [d for d in datasets if d.title or d.identifier]
     return DCATCatalog(
@@ -453,30 +452,45 @@ class DCATClient:
             if cached and not force and (time.time() - cached[0]) < CATALOG_TTL_SECONDS:
                 return cached[1]
 
-            client = await self._http()
-            body_bytes = bytearray()
-            async with client.stream("GET", url) as resp:
-                resp.raise_for_status()
-                async for chunk in resp.aiter_bytes():
-                    body_bytes.extend(chunk)
-                    if len(body_bytes) > MAX_CATALOG_BYTES:
-                        raise ValueError(
-                            f"DCAT catalog at {url} exceeds "
-                            f"{MAX_CATALOG_BYTES // (1024 * 1024)} MB; "
-                            "point catalog_url at a filtered catalog instead"
-                        )
-
-            import json
-
-            catalog = parse_catalog(json.loads(body_bytes.decode("utf-8")), url)
+            body, size = await self._download_catalog(url)
+            catalog = parse_catalog(body, url)
             _CATALOG_CACHE[url] = (time.time(), catalog)
             self.logger.info(
                 "DCAT catalog loaded",
                 url=url,
                 datasets=len(catalog.datasets),
-                bytes=len(body_bytes),
+                bytes=size,
             )
             return catalog
+
+    async def fetch_raw_catalog(self) -> Any:
+        """Fetch the catalog document unparsed and uncached.
+
+        :meth:`fetch_catalog` keeps only the fields the agent searches on.  A
+        caller that republishes the catalog (the Fair Store mirror) needs every
+        field the portal published, so it takes the document as-is.
+        """
+        body, _size = await self._download_catalog(await self.resolve_catalog_url())
+        return body
+
+    async def _download_catalog(self, url: str) -> tuple[Any, int]:
+        """Stream the catalog under :data:`MAX_CATALOG_BYTES` and decode it."""
+        client = await self._http()
+        body_bytes = bytearray()
+        async with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            async for chunk in resp.aiter_bytes():
+                body_bytes.extend(chunk)
+                if len(body_bytes) > MAX_CATALOG_BYTES:
+                    raise ValueError(
+                        f"DCAT catalog at {url} exceeds "
+                        f"{MAX_CATALOG_BYTES // (1024 * 1024)} MB; "
+                        "point catalog_url at a filtered catalog instead"
+                    )
+
+        import json
+
+        return json.loads(body_bytes.decode("utf-8")), len(body_bytes)
 
     async def search_datasets(
         self,

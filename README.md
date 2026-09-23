@@ -360,35 +360,106 @@ examples/                    # Sample generated notebooks
 
 ## CKAN Fair Store mirror
 
-Start the local CKAN 2.11 Fair Store with organization hierarchy support:
+Start the local CKAN 2.11 Fair Store with organization hierarchy support.
+Set `FAIRSTORE_SECRET_KEY` (any long random string, e.g. in `.env`) so API
+tokens and sessions survive the container being recreated:
 
 ```bash
 docker compose --profile fairstore up -d --build fairstore
 ```
 
-Preview a registered CKAN portal before writing anything:
+On first run, create a sysadmin and an API token for the mirror (keep the token
+out of the repository):
 
 ```bash
-python -m scripts.populate_fairstore \
-  --site wprdc \
-  --target-url http://localhost:5001
+docker compose exec fairstore ckan -c /srv/app/ckan.ini user add fairadmin email=fairadmin@localhost.localdomain password=<password>
+docker compose exec fairstore ckan -c /srv/app/ckan.ini sysadmin add fairadmin
+docker compose exec fairstore ckan -c /srv/app/ckan.ini user token add fairadmin mirror
 ```
 
-To apply the mirror, create a target CKAN sysadmin token, expose it through
-`CKAN_API_KEY` (or a protected file), and add `--apply`. The command performs a
-collision preflight first, then preserves source organization, dataset, and
-resource names and UUIDs. It creates one parent organization for the source
-portal, attaches source organizations beneath it, and adds any matching qsv
-profile to the resource as separate metadata. Re-running patches the preserved
-UUIDs, so it does not duplicate resources.
+Preview every registered portal (CKAN and DCAT) before writing anything, or
+pass one `--site` ID:
+
+```bash
+python -m scripts.populate_fairstore --site all --target-url http://localhost:5001
+```
+
+Add `--apply` with the token in `FAIRSTORE_API_KEY` or `--api-key-file` to
+write (`FAIRSTORE_URL` sets the default `--target-url`; the app's own
+`CKAN_URL`/`CKAN_API_KEY` are deliberately not used, and a portal that is the
+target is never mirrored into itself). Every read fails closed — a portal that
+errors mid-read is not mirrored from a partial snapshot — and with `--site all`
+one portal's failure does not stop the others (the exit status is non-zero).
+The command runs a collision preflight first, then:
+
+- creates one parent organization per source portal and attaches the portal's
+  publishers beneath it (ckanext-hierarchy);
+- for a **CKAN** portal, preserves organization, group, dataset, and resource
+  names and UUIDs;
+- for a **DCAT** portal (`/data.json` from Socrata, DKAN, ArcGIS Hub), turns
+  publishers into organizations, themes into groups, and distributions into
+  resources, with UUIDv5 identifiers derived from the catalog's own IDs. A
+  Socrata catalog is enriched from the Socrata Discovery API with the owning
+  agency (the hierarchy) and the column list (`source_data_dictionary`); pass
+  `--no-enrich` to skip it;
+- keeps every source field: anything the Fair Store's default schema has no
+  column for (ckanext-scheming fields, DCAT-US fields) becomes an extra, and
+  links to files uploaded to the source keep pointing at the source;
+- publishes each dataset's qsv profile (from `data/{ckan,dcat}_onboard/`): the
+  AI description (its prose; describegpt's provenance block stays in the raw
+  output), AI tags, row and column counts and column names become `qsv_*`
+  fields on the dataset, and four resources are added to it — a data
+  dictionary (types, AI labels and descriptions, key statistics), the full
+  `qsv stats` and `qsv frequency` tables (DataStore tables, shown as sortable
+  tables and downloadable as CSV/JSON), and the raw describegpt JSON. API keys
+  that describegpt writes into its attribution are redacted, and stats,
+  frequency or describegpt output that does not match the profiled file's
+  header (left behind by another file's profile in the same directory) is not
+  published. The source data itself is never copied;
+- skips records the source itself mirrored from another portal, so each
+  dataset is mirrored once from its origin.
+
+Re-running patches the preserved UUIDs, so it does not duplicate anything,
+and it only writes what changed: each mirrored record carries a digest of what
+was last written (`mirror_digest`, `qsv_digest`), so an unchanged dataset,
+resource or qsv table is left alone. A record the source renamed is renamed
+(DCAT names are derived, so those keep the name they were published under);
+records the source no longer publishes are reported (`withdrawn_at_source`),
+never deleted. The dry run reports the same created/updated/unchanged plan.
 
 ```bash
 python -m scripts.populate_fairstore \
-  --site wprdc \
+  --site all \
   --target-url http://localhost:5001 \
   --api-key-file /path/to/protected-token \
   --apply
 ```
+
+### Deploying the Fair Store on GCP
+
+`deploy/fairstore/deploy.sh` runs the same stack on one Compute Engine VM next
+to Verikan (in `us-central1` by default; `PROJECT` names the GCP project): CKAN on uwsgi
+(built from `ckan/ckan-base`), Postgres, Solr, Redis, and Caddy for automatic
+HTTPS. It is idempotent — the first run creates the static IP, firewall rule,
+VM and a daily snapshot schedule; later runs re-ship `docker/fairstore` and
+restart the stack. Secrets are generated on the VM (`/opt/fairstore/.env`) and
+never leave it. The host is `FAIRSTORE_HOST` if set, else the one already
+saved on the VM, else `<ip>.sslip.io` (first deploy); point a DNS name at the IP
+and rerun with `FAIRSTORE_HOST` set to move it (the search index is rebuilt
+for the new URLs).
+
+The VM has no service account (the site calls no Google API; a VM that still
+has one is stopped once to remove it), and containers are blocked from the
+metadata server except for DNS.
+
+```bash
+gcloud auth login
+PROJECT=<gcp-project-id> deploy/fairstore/deploy.sh
+```
+
+The script prints the command that mints the mirror's API token into
+`~/.config/verikan/fairstore-token` (outside the repository); then run the
+mirror above with `--target-url https://<host>` and that `--api-key-file`.
 
 ## Development
 

@@ -4,6 +4,7 @@ This client interfaces with CKAN data portals and uses Pinecone for semantic
 search over pre-indexed CKAN resources.
 """
 
+import json
 from typing import Any
 
 import httpx
@@ -14,6 +15,61 @@ from data_concierge.core.logging import get_logger
 from data_concierge.data_layer.connectors import register_closeable
 
 logger = get_logger(__name__)
+
+
+class CKANActionError(Exception):
+    """A CKAN action that did not succeed.
+
+    ``status_code`` is ``None`` when no response arrived at all (connection
+    refused, reset, timed out).
+    """
+
+    def __init__(
+        self,
+        action: str,
+        message: str,
+        *,
+        status_code: int | None = None,
+        error_type: str = "",
+    ) -> None:
+        super().__init__(f"{action}: {message}")
+        self.action = action
+        self.status_code = status_code
+        self.error_type = error_type
+
+    @property
+    def not_found(self) -> bool:
+        return self.status_code == 404 or self.error_type == "Not Found Error"
+
+    @property
+    def transient(self) -> bool:
+        """Worth retrying: no response, a server or gateway error, or rate limiting."""
+        return (
+            self.status_code is None
+            or self.status_code in {408, 425, 429}
+            or self.status_code >= 500
+        )
+
+
+def _action_result(action_name: str, response: httpx.Response) -> Any:
+    """The ``result`` of a CKAN action response, or :class:`CKANActionError`."""
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if response.is_success and isinstance(body, dict) and body.get("success"):
+        return body.get("result")
+    error = body.get("error") if isinstance(body, dict) else None
+    error_type = str(error.get("__type", "")) if isinstance(error, dict) else ""
+    if isinstance(error, dict) and error.get("message"):
+        message = str(error["message"])
+    elif error:
+        message = json.dumps(error, default=str)[:500]
+    else:
+        message = f"HTTP {response.status_code}"
+    raise CKANActionError(
+        action_name, message, status_code=response.status_code, error_type=error_type
+    )
 
 
 class CKANClient:
@@ -33,17 +89,22 @@ class CKANClient:
         self,
         ckan_url: str | None = None,
         api_key: str | None = None,
+        *,
+        use_default_key: bool = True,
     ) -> None:
         """Initialize the CKAN client.
 
         Args:
             ckan_url: Base URL for CKAN instance. Defaults to settings.
             api_key: Optional CKAN API key for authenticated access.
+            use_default_key: Fall back to ``CKAN_API_KEY`` when ``api_key`` is
+                not given. Pass ``False`` for a portal that key does not
+                belong to, so it is never sent to a third party.
         """
         self.ckan_url = (ckan_url or settings.ckan_url).rstrip("/")
         self._api_key = api_key or (
             settings.ckan_api_key.get_secret_value()
-            if hasattr(settings, 'ckan_api_key') and settings.ckan_api_key
+            if use_default_key and hasattr(settings, 'ckan_api_key') and settings.ckan_api_key
             else None
         )
         self._client: httpx.AsyncClient | None = None
@@ -71,6 +132,19 @@ class CKANClient:
             await self._client.aclose()
             self._client = None
 
+    async def call(self, action_name: str, params: dict[str, Any] | None = None) -> Any:
+        """Execute a CKAN API action, raising :class:`CKANActionError` on failure.
+
+        Unlike :meth:`action`, a failure is never mistaken for an empty result,
+        which is what a caller that writes based on what it read needs.
+        """
+        client = await self._get_client()
+        try:
+            response = await client.post(f"/api/3/action/{action_name}", json=params or {})
+        except httpx.HTTPError as e:
+            raise CKANActionError(action_name, str(e) or type(e).__name__) from e
+        return _action_result(action_name, response)
+
     async def action(self, action_name: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Execute a CKAN API action.
 
@@ -79,45 +153,89 @@ class CKANClient:
             params: Action parameters
 
         Returns:
-            API response result
+            API response result, or ``{}`` on any failure (see :meth:`call`)
         """
-        client = await self._get_client()
-
         try:
-            response = await client.post(
-                f"/api/3/action/{action_name}",
-                json=params or {},
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            if not data.get("success"):
-                error_msg = data.get("error", {}).get("message", "Unknown error")
-                self.logger.error("CKAN action failed", action=action_name, error=error_msg)
-                return {}
-
-            return data.get("result", {})
-
-        except httpx.HTTPStatusError as e:
+            result = await self.call(action_name, params)
+        except CKANActionError as e:
             # Log 404s at debug level since they're expected for invalid resource IDs
-            if e.response.status_code == 404:
+            if e.not_found:
                 self.logger.debug(
                     "CKAN resource not found",
                     action=action_name,
-                    status_code=404,
+                    status_code=e.status_code,
                     resource_id=params.get("resource_id") if params else None,
                 )
+            elif e.status_code is None:
+                self.logger.error("CKAN API error", action=action_name, error=str(e))
             else:
                 self.logger.error(
-                    "CKAN HTTP error",
+                    "CKAN action failed",
                     action=action_name,
-                    status_code=e.response.status_code,
+                    status_code=e.status_code,
                     error=str(e),
                 )
             return {}
         except Exception as e:
             self.logger.error("CKAN API error", action=action_name, error=str(e))
             return {}
+        return {} if result is None else result
+
+    async def upload_call(
+        self,
+        action_name: str,
+        fields: dict[str, Any],
+        *,
+        filename: str,
+        content: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> Any:
+        """Execute a CKAN action that carries a file (``resource_create``/``_patch``).
+
+        CKAN takes the file as the multipart ``upload`` field and every other
+        field as form text, so non-string values are sent JSON-encoded. A
+        separate client is used because the shared one pins a JSON
+        ``Content-Type`` that would override the multipart boundary.
+
+        Raises :class:`CKANActionError` on failure, as :meth:`call` does.
+        """
+        headers = {"Authorization": self._api_key} if self._api_key else {}
+        data = {
+            key: value if isinstance(value, str) else json.dumps(value)
+            for key, value in fields.items()
+            if value is not None
+        }
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.ckan_url, timeout=120.0, headers=headers
+            ) as client:
+                response = await client.post(
+                    f"/api/3/action/{action_name}",
+                    data=data,
+                    files={"upload": (filename, content, content_type)},
+                )
+        except httpx.HTTPError as e:
+            raise CKANActionError(action_name, str(e) or type(e).__name__) from e
+        return _action_result(action_name, response)
+
+    async def upload_action(
+        self,
+        action_name: str,
+        fields: dict[str, Any],
+        *,
+        filename: str,
+        content: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> dict[str, Any]:
+        """:meth:`upload_call`, returning ``{}`` on failure (as :meth:`action`)."""
+        try:
+            result = await self.upload_call(
+                action_name, fields, filename=filename, content=content, content_type=content_type
+            )
+        except Exception as e:
+            self.logger.error("CKAN upload failed", action=action_name, error=str(e)[:500])
+            return {}
+        return result or {}
 
     async def package_search(
         self,

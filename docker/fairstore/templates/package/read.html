@@ -1,0 +1,24 @@
+{% ckan_extends %}
+
+{#- The dataset's qsv profile (scripts/populate_fairstore.py): the summary qsv
+    describegpt wrote, rendered as markdown under the source's own
+    description. The mirror stores only the prose; describegpt's provenance
+    block is carried by qsv_model / qsv_version and the describegpt resource. -#}
+{% block package_notes %}
+  {{ super() }}
+  {% set qsv_text = pkg.extras | selectattr('key', 'equalto', 'qsv_description') | map(attribute='value') | first %}
+  {% if qsv_text %}
+    {% set qsv_model = pkg.extras | selectattr('key', 'equalto', 'qsv_model') | map(attribute='value') | first %}
+    <section class="qsv-summary">
+      <h2>AI summary</h2>
+      <div class="notes embedded-content">
+        {{ h.render_markdown(qsv_text) }}
+      </div>
+      <p class="text-muted"><small>
+        Written by qsv describegpt{% if qsv_model %} ({{ qsv_model }}){% endif %} from a profile of this
+        dataset's data; AI-written text may contain inaccuracies. The profile's data dictionary
+        and its other qsv resources are listed under Data and Resources.
+      </small></p>
+    </section>
+  {% endif %}
+{% endblock %}
