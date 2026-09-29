@@ -435,6 +435,26 @@ python -m scripts.populate_fairstore \
   --apply
 ```
 
+### Managing the Fair Store from Verikan
+
+The admin panel's **Fair Store** page links Verikan to it:
+
+- **Connection** — the Fair Store URL and a sysadmin API token (`ckan user
+  token add <sysadmin> verikan` on the Fair Store). `FAIRSTORE_URL` and
+  `FAIRSTORE_API_KEY` seed these; values saved on the page take precedence.
+  The token is never shown again and is only ever sent to the host it was saved
+  for: moving the URL to another host drops it.
+- **Chat source** — optionally offers the Fair Store as a data source in chat.
+  The agent searches its catalog and loads each dataset's rows from the portal
+  it was mirrored from.
+- **Mirror runs** — dry runs and writes of every portal or one, with a live log
+  and a per-portal summary. On Cloud Run the qsv profiles come from the storage
+  backend that onboarding syncs to (`--qsv-source`).
+- **Site settings** — the Fair Store's title, description, home page and about
+  text, logo and custom CSS, read and saved live.
+
+The chat sidebar and the data dictionary link to the Fair Store once it is set.
+
 ### Deploying the Fair Store on GCP
 
 `deploy/fairstore/deploy.sh` runs the same stack on one Compute Engine VM next

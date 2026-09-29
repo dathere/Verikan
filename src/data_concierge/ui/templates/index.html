@@ -84,6 +84,9 @@
             <nav class="sidebar-navigation" aria-label="Explore">
                 <a href="/library"><i class="bi bi-patch-check" aria-hidden="true"></i>Verified library</a>
                 <a href="/dictionary"><i class="bi bi-table" aria-hidden="true"></i>Data dictionary</a>
+                {% if fairstore and fairstore.configured %}
+                <a href="{{ fairstore.url }}" target="_blank" rel="noopener"><i class="bi bi-archive" aria-hidden="true"></i>Fair Store catalog</a>
+                {% endif %}
                 <a href="/docs"><i class="bi bi-question-circle" aria-hidden="true"></i>How it works</a>
                 <a href="/admin" id="adminNavBtn" class="d-none"><i class="bi bi-speedometer2" aria-hidden="true"></i>Admin dashboard</a>
                 <button id="themeToggle" type="button" onclick="toggleTheme()"

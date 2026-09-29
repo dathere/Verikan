@@ -230,12 +230,15 @@ def add_site(
     added_by: str = "admin",
     portal_type: str = PORTAL_TYPE_CKAN,
     catalog_url: str | None = None,
+    managed_by: str | None = None,
 ) -> dict[str, Any]:
     """Add a new portal.  Auto-generates an ID from the name if not given.
 
     ``portal_type`` selects the access mechanism — ``ckan`` for a live action
     API, ``dcat`` for a catalog document.  ``catalog_url`` is DCAT-only and
     optional: when omitted the standard catalog paths are probed under ``url``.
+    ``managed_by`` marks an entry another settings page owns (the Fair Store's
+    chat-source entry), which only that page changes or removes.
 
     Raises ``ValueError`` if ``url`` or ``name`` is empty, or if a site with
     the chosen ID already exists.
@@ -270,6 +273,8 @@ def add_site(
         "added_by": added_by,
         "added_at": _now(),
     }
+    if managed_by:
+        entry["managed_by"] = managed_by
     sites.append(entry)
     _save(sites)
     logger.info(

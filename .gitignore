@@ -168,6 +168,7 @@ fairstore-token*
 /roles.json
 /notebook_verification/
 /github_settings.json
+/fairstore_settings.json
 /landing_settings.json
 /system_prompt_settings.json
 /runtime_settings.json

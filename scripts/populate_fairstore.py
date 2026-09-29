@@ -46,6 +46,7 @@ import logging
 import os
 import re
 import sys
+import tempfile
 import uuid
 from collections.abc import Iterable
 from pathlib import Path
@@ -66,7 +67,10 @@ from data_concierge.data_layer.connectors.dcat import (  # noqa: E402
     raw_dataset_nodes,
 )
 from data_concierge.data_layer.onboard_index import _scrub_secrets  # noqa: E402
-from data_concierge.data_layer.qsv_profiling import _extract_qsv_tags  # noqa: E402
+from data_concierge.data_layer.qsv_profiling import (  # noqa: E402
+    MIRRORED_QSV_OUTPUTS,
+    _extract_qsv_tags,
+)
 from data_concierge.gateway.ckan_sites import (  # noqa: E402
     PORTAL_TYPE_DCAT,
     get_site,
@@ -256,21 +260,125 @@ def _slug(text: str, fallback: str) -> str:
     return slug[:100]
 
 
-def _load_index(site: str, index_path: str | Path | None = None) -> dict[str, Any]:
-    """Load qsv output when present; mirroring itself does not require it."""
-    candidates = (
-        [Path(index_path)]
-        if index_path
-        else [
+_ONBOARD_PREFIXES = ("ckan_onboard", "dcat_onboard")
+# What the mirror reads from an onboarding directory besides index.json.
+_QSV_OUTPUTS = MIRRORED_QSV_OUTPUTS
+# A dataset directory name as Path.name yields it: no separators, not . or ..
+_SAFE_DIR_RE = re.compile(r"^(?!\.{1,2}$)[^/\\\x00-\x1f]+$")
+
+
+def _load_index(
+    site: str,
+    index_path: str | Path | None = None,
+    *,
+    source: str = "local",
+    stage_root: Path | None = None,
+) -> dict[str, Any]:
+    """Load qsv output when present; mirroring itself does not require it.
+
+    ``source`` is ``local`` (this checkout's onboarding directories), ``storage``
+    (the storage backend, which onboarding syncs to — GCS on Cloud Run), or
+    ``auto`` (local, else storage). Output read from storage is staged under
+    ``stage_root`` first, because the profile vetting reads files.
+    """
+    if index_path:
+        return json.loads(Path(index_path).read_text(encoding="utf-8"))
+    if source in ("auto", "local"):
+        for path in (
             _PROJECT_ROOT / "data" / "ckan_onboard" / site / "index.json",
             _PROJECT_ROOT / "data" / "dcat_onboard" / site / "index.json",
             _PROJECT_ROOT / "ckan_onboard" / site / "index.json",
-        ]
+        ):
+            if path.exists():
+                return json.loads(path.read_text(encoding="utf-8"))
+        if source == "local":
+            return {}
+    root = stage_root or Path(tempfile.mkdtemp(prefix="fairstore-qsv-"))
+    return _stage_from_storage(site, root)
+
+
+def _stage_from_storage(site: str, root: Path) -> dict[str, Any]:
+    """Copy one portal's onboarding output from the storage backend to ``root``.
+
+    Returns its index with each ``local_path`` pointed at the staged directory.
+    Only what the mirror reads is copied (the profiled CSVs are not synced, and
+    are not needed). The ``sync_manifest.json`` that ``sync_to_storage`` writes
+    stands in for the local directory: each file's header (checked against its
+    qsv output), which dataset directories existed, and which qsv outputs they
+    held. A directory it does not list is not created, so, as locally, its qsv
+    resources are not removed; a stale object it does not list is not staged.
+    """
+    from data_concierge.data_layer.storage import storage
+
+    index: dict[str, Any] | None = None
+    prefix = ""
+    for prefix in _ONBOARD_PREFIXES:
+        index = storage.read_json(f"{prefix}/{site}/index.json")
+        if index:
+            break
+    if not index:
+        return {}
+    manifest = storage.read_json(f"{prefix}/{site}/sync_manifest.json") or {}
+    headers = manifest.get("headers")
+    dirs = manifest.get("dirs")
+    if not isinstance(headers, dict) or not isinstance(dirs, dict):
+        # Without it, output left by another file in the same directory passes
+        # the vetting and failed profiles lose their stats, so the run would
+        # rewrite (and delete) qsv resources a local run keeps. No profiles:
+        # the mirror's qsv guard then refuses to write.
+        print(
+            f"{site}: the onboarding output in the storage backend has no "
+            f"sync_manifest.json (it predates it); re-sync it with onboard_*.py "
+            f"--rebuild-index before mirroring its qsv profiles from storage",
+            file=sys.stderr,
+        )
+        return {}
+
+    staged: dict[str, Path] = {}
+    for dataset in index.get("datasets", []) or []:
+        for resource in dataset.get("resources", []) or []:
+            local_path = Path(str(resource.get("local_path") or ""))
+            # onboard_*.py write each resource to <output-dir>/<site>/<dataset>/,
+            # which sync_to_storage stores under <prefix>/<site>/<dataset>/.
+            dataset_dir = local_path.parent.name
+            key_dir = f"{prefix}/{site}/{dataset_dir}"
+            listed = dirs.get(key_dir)
+            if (
+                not local_path.name
+                or not _SAFE_DIR_RE.match(dataset_dir)
+                or not isinstance(listed, list)
+            ):
+                # Never fall back to a local path: point at a directory that
+                # does not exist, which is what the synced directory lacked.
+                resource["local_path"] = str(root / "_absent" / (local_path.name or "file"))
+                continue
+            if key_dir not in staged:
+                directory = root / prefix / site / dataset_dir
+                directory.mkdir(parents=True, exist_ok=True)
+                for name in _QSV_OUTPUTS:
+                    if name not in listed:
+                        continue
+                    data = storage.read_bytes(f"{key_dir}/{name}")
+                    if data is None:
+                        # Listed but gone: staging less would remove its qsv
+                        # resources, so no profiles (the qsv guard then refuses).
+                        print(
+                            f"{site}: {key_dir}/{name} is listed in sync_manifest.json but "
+                            f"missing from the storage backend; re-sync the onboarding output",
+                            file=sys.stderr,
+                        )
+                        return {}
+                    (directory / name).write_bytes(data)
+                staged[key_dir] = directory
+            resource["local_path"] = str(staged[key_dir] / local_path.name)
+            header = headers.get(f"{key_dir}/{local_path.name}")
+            if isinstance(header, list):
+                resource["profiled_header"] = [str(name) for name in header]
+    print(
+        f"{site}: staged qsv output for {len(staged)} datasets from the storage backend",
+        file=sys.stderr,
     )
-    for path in candidates:
-        if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
-    return {}
+    return index
 
 
 def _column_dictionary(resource: dict[str, Any]) -> list[dict[str, Any]]:
@@ -327,7 +435,9 @@ def _profiled_header(qsv: dict[str, Any]) -> list[str] | None:
     path = Path(local_path)
     path = path if path.is_absolute() else _PROJECT_ROOT / path
     if not path.is_file():
-        return None
+        # Staged from the storage backend: the header recorded at sync time.
+        recorded = qsv.get("profiled_header")
+        return [str(name) for name in recorded if name] if isinstance(recorded, list) else None
     _raise_csv_field_limit()
     with path.open(newline="", encoding="utf-8-sig", errors="replace") as handle:
         return [name for name in next(csv.reader(handle), []) if name]
@@ -2353,6 +2463,16 @@ async def mirror_catalog(
     return summary
 
 
+def _site_index(site_id: str, args: argparse.Namespace) -> dict[str, Any]:
+    stage_root = getattr(args, "stage_root", None)
+    return _load_index(
+        site_id,
+        args.index_path,
+        source=getattr(args, "qsv_source", "local"),
+        stage_root=Path(stage_root) / site_id if stage_root else None,
+    )
+
+
 async def _mirror_site(
     site_id: str, site: dict[str, Any], args: argparse.Namespace, api_key: str
 ) -> dict[str, Any]:
@@ -2391,7 +2511,7 @@ async def _mirror_site(
                 source=None,
                 snapshot=snapshot,
                 pin_names=True,
-                qsv_index=_dcat_qsv_index(_load_index(site_id, args.index_path), snapshot),
+                qsv_index=_dcat_qsv_index(_site_index(site_id, args), snapshot),
                 **common,
             )
             summary["socrata_enriched"] = sum(
@@ -2406,7 +2526,7 @@ async def _mirror_site(
             return await mirror_catalog(
                 source=source,
                 organization=args.organization,
-                qsv_index=_load_index(site_id, args.index_path),
+                qsv_index=_site_index(site_id, args),
                 limit=args.limit,
                 **common,
             )
@@ -2426,15 +2546,21 @@ def _same_portal(url: str, other: str) -> bool:
 
 
 async def _main(args: argparse.Namespace) -> dict[str, Any] | list[dict[str, Any]]:
+    requested = [part.strip() for part in args.site.split(",") if part.strip()]
+    many = args.site == "all" or len(requested) > 1
+    if many and (args.organization or args.index_path):
+        raise MirrorError("--organization and --index-path need a single --site")
     if args.site == "all":
-        if args.organization or args.index_path:
-            raise MirrorError("--organization and --index-path need a single --site")
         sites = [(str(site["id"]), site) for site in list_sites()]
     else:
-        site = get_site(args.site)
-        if not site:
-            raise MirrorError(f"Unknown site {args.site!r}; add it to ckan_sites.json first")
-        sites = [(args.site, site)]
+        sites = []
+        for site_id in dict.fromkeys(requested):
+            site = get_site(site_id)
+            if not site:
+                raise MirrorError(f"Unknown site {site_id!r}; add it to ckan_sites.json first")
+            sites.append((site_id, site))
+        if not sites:
+            raise MirrorError("--site needs a portal ID, a comma-separated list, or 'all'")
 
     api_key = os.environ.get(args.api_key_env, "")
     if args.api_key_file:
@@ -2444,7 +2570,7 @@ async def _main(args: argparse.Namespace) -> dict[str, Any] | list[dict[str, Any
             f"Set {args.api_key_env} or --api-key-file when using --apply; a sysadmin token is required"
         )
 
-    if args.site != "all" and _same_portal(sites[0][1]["url"], args.target_url):
+    if not many and _same_portal(sites[0][1]["url"], args.target_url):
         raise MirrorError(f"{args.site} is the target portal; it cannot be mirrored into itself")
 
     summaries: list[dict[str, Any]] = []
@@ -2456,13 +2582,20 @@ async def _main(args: argparse.Namespace) -> dict[str, Any] | list[dict[str, Any
         try:
             summaries.append(await _mirror_site(site_id, site, args, api_key))
         except Exception as exc:
-            if args.site != "all":
+            if not many:
                 raise
             # One portal's outage must not stop the others from refreshing;
             # the failure is reported and the exit status is non-zero.
             print(f"error: {site_id}: {type(exc).__name__}: {exc}", file=sys.stderr)
             summaries.append({"site": site_id, "error": f"{type(exc).__name__}: {exc}"})
-    return summaries if args.site == "all" else summaries[0]
+    return summaries if many else summaries[0]
+
+
+def _write_summary(path: str | None, summary: Any) -> None:
+    """Write the run's summary where a supervisor (the admin panel) reads it."""
+    if not path:
+        return
+    Path(path).write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def main() -> None:
@@ -2470,7 +2603,10 @@ def main() -> None:
     parser.add_argument(
         "--site",
         default="wprdc",
-        help="source site ID from ckan_sites.json, or 'all' for every registered portal",
+        help=(
+            "source site ID from ckan_sites.json, a comma-separated list of them, "
+            "or 'all' for every registered portal"
+        ),
     )
     # Deliberately not CKAN_URL/CKAN_API_KEY: those are the app's portal
     # settings, and in the app container CKAN_URL is data.dathere.com.
@@ -2488,15 +2624,29 @@ def main() -> None:
     )
     parser.add_argument("--api-key-env", default="FAIRSTORE_API_KEY")
     parser.add_argument("--api-key-file", help="read the target sysadmin token from a file")
+    parser.add_argument(
+        "--qsv-source",
+        choices=("auto", "local", "storage"),
+        default="auto",
+        help=(
+            "where qsv profiles come from: this checkout's onboarding output (local), "
+            "the storage backend onboarding syncs to (storage), or local else storage (auto)"
+        ),
+    )
+    parser.add_argument("--summary-file", help="also write the JSON summary to this file")
     args = parser.parse_args()
     # Development logging is DEBUG on stdout, where this command prints its
     # JSON summary; a line per HTTP request would bury it.
     for noisy in ("asyncio", "httpx", "httpcore"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     try:
-        summary = asyncio.run(_main(args))
+        with tempfile.TemporaryDirectory(prefix="fairstore-qsv-") as stage_root:
+            args.stage_root = stage_root
+            summary = asyncio.run(_main(args))
     except MirrorError as exc:
+        _write_summary(args.summary_file, {"error": str(exc)})
         parser.exit(2, f"error: {exc}\n")
+    _write_summary(args.summary_file, summary)
     print(json.dumps(summary, indent=2, sort_keys=True))
     if isinstance(summary, list) and any("error" in item for item in summary):
         sys.exit(1)

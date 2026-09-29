@@ -103,6 +103,10 @@
                         data-bs-target="#ckansites" type="button" role="tab" aria-controls="ckansites">
                     <i class="bi bi-globe" aria-hidden="true"></i>Data Portals
                 </button>
+                <button class="nav-link" id="fairstore-tab" data-bs-toggle="tab"
+                        data-bs-target="#fairstore" type="button" role="tab" aria-controls="fairstore">
+                    <i class="bi bi-archive" aria-hidden="true"></i>Fair Store
+                </button>
 
                 <div class="admin-nav-group">Insights</div>
                 <button class="nav-link" id="querylogs-tab" data-bs-toggle="tab"
@@ -815,6 +819,225 @@
                         </div>
                         <pre id="onboardLog" class="onboarding-log" aria-live="polite"></pre>
                     </div>
+                </div>
+            </div>
+
+            <!-- Fair Store Tab -->
+            <div class="tab-pane fade" id="fairstore" role="tabpanel" aria-labelledby="fairstore-tab">
+                <div class="p-4">
+                    <div class="pane-header">
+                        <div>
+                            <h2><i class="bi bi-archive" aria-hidden="true"></i>Fair Store</h2>
+                            <p class="pane-sub">
+                                The Fair Store is the CKAN catalog that mirrors every registered data
+                                portal, with each portal&rsquo;s organization hierarchy and the qsv
+                                profiles onboarding produced (data dictionaries, statistics, frequency
+                                tables and AI descriptions). Link it here, run mirrors into it, and
+                                edit its site settings.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <a href="#" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm d-none" id="fsOpenLink">
+                                <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open Fair Store
+                            </a>
+                            <button class="btn btn-outline-secondary btn-sm" id="fsRefreshBtn" type="button">
+                                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="fsAlert"></div>
+
+                    <!-- Status -->
+                    <div id="fsStatus" class="mb-4">
+                        <div class="empty-state">
+                            <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                            Checking the Fair Store…
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <!-- Mirror runs -->
+                    <div class="pane-header">
+                        <div>
+                            <h2 class="h5"><i class="bi bi-arrow-repeat me-2" aria-hidden="true"></i>Mirror Runs</h2>
+                            <p class="pane-sub">
+                                Copy the registered portals&rsquo; catalogs into the Fair Store.
+                                Reruns only write what changed at the source, and records a portal
+                                withdrew are reported, never deleted. Start with a dry run: it
+                                reads everything and reports the plan without writing.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div id="fsMirrorWarnings"></div>
+
+                    <form id="fsMirrorForm" class="row g-3 align-items-end mb-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label" for="fsMirrorSite">Portal</label>
+                            <select class="form-select" id="fsMirrorSite">
+                                <option value="all">All portals</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label" for="fsMirrorLimit">Max datasets</label>
+                            <input type="number" class="form-control" id="fsMirrorLimit" min="1" max="5000"
+                                   placeholder="all" inputmode="numeric">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="fsMirrorApply">
+                                <label class="form-check-label" for="fsMirrorApply">Write to the Fair Store</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="fsMirrorEnrich" checked>
+                                <label class="form-check-label" for="fsMirrorEnrich">Socrata enrichment</label>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-3 text-md-end">
+                            <button type="submit" class="btn btn-primary" id="fsMirrorStartBtn">
+                                <i class="bi bi-play-circle me-2" aria-hidden="true"></i><span id="fsMirrorStartLabel">Start dry run</span>
+                            </button>
+                        </div>
+                        <div class="col-12 form-text mt-1">
+                            &ldquo;Max datasets&rdquo; is for smoke tests: a limited run skips the
+                            withdrawn-at-source check. Socrata enrichment adds each data.pa.gov
+                            dataset&rsquo;s owning agency and column list.
+                        </div>
+                    </form>
+
+                    <div id="fsJobList">
+                        <div class="empty-state">
+                            <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                            Loading mirror runs…
+                        </div>
+                    </div>
+
+                    <div id="fsLogPanel" class="mt-3 d-none">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                            <div>
+                                <strong id="fsLogTitle">Mirror run</strong>
+                                <span id="fsLogStatus" class="ms-2"></span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-outline-danger btn-sm d-none" id="fsCancelBtn" type="button">
+                                    <i class="bi bi-stop-circle me-1" aria-hidden="true"></i>Cancel run
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" id="fsLogCloseBtn" type="button">
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                        <div id="fsResult" class="mb-2"></div>
+                        <pre id="fsLog" class="onboarding-log" aria-live="polite"></pre>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <!-- Connection + chat source -->
+                    <div class="pane-header">
+                        <div>
+                            <h2 class="h5"><i class="bi bi-link-45deg me-2" aria-hidden="true"></i>Connection</h2>
+                            <p class="pane-sub">
+                                Where the Fair Store is, the sysadmin API token Verikan uses to write
+                                to it, and whether chat users can search it.
+                            </p>
+                        </div>
+                    </div>
+
+                    <form id="fsSettingsForm" class="pane-narrow">
+                        <div class="mb-3">
+                            <label for="fsUrl" class="form-label">Fair Store URL</label>
+                            <input type="url" class="form-control" id="fsUrl" maxlength="400"
+                                   placeholder="https://fairstore.example.org" autocomplete="off">
+                            <div class="form-text" id="fsUrlHint">
+                                The address people and Verikan use. Must be https:// unless it is on this machine.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="fsToken" class="form-label">Sysadmin API token</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="fsToken" maxlength="4096"
+                                       autocomplete="off" placeholder="Paste a CKAN API token">
+                                <button class="btn btn-outline-secondary" type="button" id="fsTokenToggle"
+                                        aria-label="Show token" aria-pressed="false">
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div class="form-text" id="fsTokenHint">Leave blank to keep the existing token.</div>
+                            <div class="form-check mt-1 d-none" id="fsClearTokenWrap">
+                                <input class="form-check-input" type="checkbox" id="fsClearToken">
+                                <label class="form-check-label small" for="fsClearToken">Remove the saved token</label>
+                            </div>
+                            <div class="form-text">
+                                Create one on the Fair Store with
+                                <code>ckan user token add &lt;sysadmin&gt; verikan</code>. Changing the URL to
+                                another host drops the saved token, so it is never sent to a different server.
+                            </div>
+                        </div>
+
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="fsChatSource">
+                            <label class="form-check-label" for="fsChatSource">Offer the Fair Store as a data source in chat</label>
+                        </div>
+                        <div id="fsChatFields" class="ms-4 mb-3">
+                            <div class="mb-2">
+                                <label for="fsPortalName" class="form-label small">Name shown in chat</label>
+                                <input type="text" class="form-control form-control-sm" id="fsPortalName" maxlength="200">
+                            </div>
+                            <div class="mb-2">
+                                <label for="fsPortalDescription" class="form-label small">Description (tells the agent what is here)</label>
+                                <textarea class="form-control form-control-sm" id="fsPortalDescription" rows="3" maxlength="2000"></textarea>
+                            </div>
+                            <div class="form-text">
+                                The agent searches the Fair Store&rsquo;s catalog and loads rows from the
+                                portal each dataset was mirrored from.
+                            </div>
+                        </div>
+
+                        <h3 class="text-uppercase text-muted small fw-bold mb-2 mt-4">Mirror defaults</h3>
+                        <div class="mb-2 small text-muted">Portals an &ldquo;All portals&rdquo; run covers (none checked = every registered portal):</div>
+                        <div id="fsMirrorSites" class="mb-3"></div>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="fsEnrichDefault">
+                            <label class="form-check-label" for="fsEnrichDefault">Socrata enrichment on by default</label>
+                        </div>
+
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="submit" class="btn btn-primary" id="fsSaveBtn">
+                                <i class="bi bi-save me-2" aria-hidden="true"></i>Save Settings
+                            </button>
+                        </div>
+                        <div class="form-text mt-2" id="fsUpdatedHint"></div>
+                    </form>
+
+                    <hr class="my-4">
+
+                    <!-- CKAN site settings -->
+                    <div class="pane-header">
+                        <div>
+                            <h2 class="h5"><i class="bi bi-sliders me-2" aria-hidden="true"></i>Fair Store Site Settings</h2>
+                            <p class="pane-sub">
+                                The Fair Store&rsquo;s own title, description, home page and about text,
+                                logo and custom CSS &mdash; read from and saved to the Fair Store live.
+                            </p>
+                        </div>
+                        <div class="pane-actions">
+                            <button class="btn btn-outline-secondary btn-sm" id="fsSiteReloadBtn" type="button">
+                                <i class="bi bi-cloud-download me-1" aria-hidden="true"></i>Reload
+                            </button>
+                        </div>
+                    </div>
+                    <div id="fsSiteAlert" class="pane-narrow"></div>
+                    <form id="fsSiteForm" class="pane-narrow">
+                        <div id="fsSiteFields" class="text-muted small">Set the URL and a sysadmin token to edit these.</div>
+                        <div class="d-flex gap-2 flex-wrap mt-3 d-none" id="fsSiteActions">
+                            <button type="submit" class="btn btn-primary" id="fsSiteSaveBtn">
+                                <i class="bi bi-save me-2" aria-hidden="true"></i>Save Site Settings
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -1658,7 +1881,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/python.min.js"></script>
-    <script src="/static/js/admin.js?v=20260819-reviews3"></script>
+    <script src="/static/js/admin.js?v=20260929-fairstore"></script>
     <script src="/static/js/theme.js?v=20260713-redesign"></script>
 </body>
 </html>

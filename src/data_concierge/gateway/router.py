@@ -820,6 +820,19 @@ class UpdateCkanSiteRequest(BaseModel):
     keywords: list[str] | None = None
 
 
+def _refuse_managed_site(site_id: str) -> None:
+    """Another settings page owns this entry (the Fair Store's chat source)."""
+    site = ckan_sites_store.get_site(site_id)
+    if site and site.get("managed_by") == "fairstore":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This entry follows the Fair Store settings. Change it, or turn off "
+                "'Offer the Fair Store as a data source in chat', on the Fair Store page."
+            ),
+        )
+
+
 @router.get("/admin/ckan-sites")
 async def list_ckan_sites(
     _admin: dict[str, Any] = Depends(require_admin),
@@ -860,6 +873,7 @@ async def update_ckan_site(
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
     """Update an existing CKAN site entry."""
+    _refuse_managed_site(site_id)
     updates = request.model_dump(exclude_none=True)
     entry = ckan_sites_store.update_site(site_id, updates)
     if not entry:
@@ -876,6 +890,7 @@ async def delete_ckan_site(
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
     """Remove a CKAN site from the registry."""
+    _refuse_managed_site(site_id)
     if not ckan_sites_store.remove_site(site_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -921,7 +936,7 @@ async def list_onboarding_jobs(
     """Recent onboarding runs, plus anything about this host that would break one."""
     from data_concierge.gateway import onboarding_jobs
 
-    jobs = onboarding_jobs.list_jobs()
+    jobs = onboarding_jobs.list_jobs(kind=onboarding_jobs.KIND_ONBOARDING)
     return {
         "count": len(jobs),
         "jobs": jobs,
@@ -943,6 +958,14 @@ async def start_onboarding_job(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Portal '{request.site_id}' is not registered",
+        )
+    if site.get("managed_by") == "fairstore":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The Fair Store is not onboarded itself: its qsv profiles come from "
+                "onboarding the portals it mirrors."
+            ),
         )
 
     options = request.model_dump(exclude={"site_id"})
@@ -988,6 +1011,195 @@ async def cancel_onboarding_job(
             detail=f"Job '{job_id}' is not running",
         )
     return {"message": f"Job '{job_id}' cancelled"}
+
+
+# =============================================================================
+# Fair Store (admin-only) — the CKAN that mirrors every registered portal
+# =============================================================================
+
+
+class FairStoreSettingsRequest(BaseModel):
+    """Changes to the Fair Store link. Omitted fields keep their value.
+
+    ``token`` follows the GitHub settings' "blank = keep" rule, because the UI
+    never sees the current token; ``clear_token`` removes it.
+    """
+
+    url: str | None = Field(default=None, max_length=400)
+    token: str | None = Field(default=None, max_length=4096)
+    clear_token: bool = False
+    chat_source: bool | None = Field(
+        default=None, description="Offer the Fair Store as a data source in chat"
+    )
+    portal_name: str | None = Field(default=None, max_length=200)
+    portal_description: str | None = Field(default=None, max_length=2000)
+    quality_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    mirror_sites: list[str] | None = Field(
+        default=None, description="Portals a mirror run of 'all' covers; empty = every portal"
+    )
+    enrich: bool | None = Field(default=None, description="Socrata enrichment for DCAT portals")
+
+
+class FairStoreSiteConfigRequest(BaseModel):
+    """New values for the Fair Store's runtime site options (``ckan.site_*``)."""
+
+    options: dict[str, str | None]
+
+
+class StartMirrorJobRequest(BaseModel):
+    """A Fair Store mirror run. The default is a dry run of every portal."""
+
+    site: str = Field(default="all", min_length=1, max_length=80)
+    apply: bool = Field(default=False, description="Write to the Fair Store (else dry run)")
+    enrich: bool | None = Field(default=None, description="Defaults to the saved setting")
+    limit: int | None = Field(default=None, ge=1, le=5000, description="Smoke test only")
+
+
+@router.get("/admin/fairstore")
+async def get_fairstore_settings(
+    _admin: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """The Fair Store link's settings (the token only as set/unset)."""
+    from data_concierge.gateway import fairstore
+
+    return {"settings": fairstore.public_settings()}
+
+
+@router.post("/admin/fairstore")
+async def update_fairstore_settings(
+    request: FairStoreSettingsRequest,
+    admin_user: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """Save the Fair Store link's settings (and its chat-source registration)."""
+    from data_concierge.gateway import fairstore
+
+    try:
+        saved = fairstore.save_settings(
+            request.model_dump(exclude_none=True),
+            updated_by=admin_user.get("user", "admin"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except fairstore.SettingsUnreadable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    return {"message": "Fair Store settings saved", "settings": saved}
+
+
+@router.get("/admin/fairstore/status")
+async def get_fairstore_status(
+    _admin: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """Live health, token check and dataset counts per source portal."""
+    from data_concierge.gateway import fairstore, onboarding_jobs
+
+    report = await fairstore.status()
+    mirror_runs = onboarding_jobs.list_jobs(limit=1, kind=onboarding_jobs.KIND_FAIRSTORE_MIRROR)
+    report["last_mirror_run"] = mirror_runs[0] if mirror_runs else None
+    return report
+
+
+@router.get("/admin/fairstore/site-config")
+async def get_fairstore_site_config(
+    _admin: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """The Fair Store's runtime site options, read live (needs the token)."""
+    from data_concierge.gateway import fairstore
+
+    try:
+        return await fairstore.get_site_config()
+    except fairstore.FairStoreError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/admin/fairstore/site-config")
+async def update_fairstore_site_config(
+    request: FairStoreSiteConfigRequest,
+    admin_user: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """Change the Fair Store's site title, about text, logo or custom CSS."""
+    from data_concierge.gateway import fairstore
+
+    try:
+        config = await fairstore.update_site_config(request.options)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except fairstore.FairStoreError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    logger.info(
+        "Fair Store site options changed from the admin panel",
+        admin=admin_user.get("user"),
+        keys=sorted(request.options),
+    )
+    return {"message": "Fair Store site settings saved", **config}
+
+
+@router.get("/admin/fairstore/mirror-jobs")
+async def list_fairstore_mirror_jobs(
+    _admin: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """Recent mirror runs. Logs and cancel use ``/admin/onboarding-jobs/{id}``."""
+    from data_concierge.gateway import onboarding_jobs
+
+    jobs = onboarding_jobs.list_jobs(kind=onboarding_jobs.KIND_FAIRSTORE_MIRROR)
+    warnings = [
+        w for w in onboarding_jobs.runtime_warnings() if "qsv" not in w and "OPENROUTER" not in w
+    ]
+    return {
+        "count": len(jobs),
+        "jobs": jobs,
+        "running_job_id": onboarding_jobs.running_job_id(),
+        "warnings": warnings,
+    }
+
+
+@router.post("/admin/fairstore/mirror-jobs")
+async def start_fairstore_mirror_job(
+    request: StartMirrorJobRequest,
+    admin_user: dict[str, Any] = Depends(require_admin),
+) -> dict[str, Any]:
+    """Start a mirror run into the Fair Store (a dry run unless ``apply``)."""
+    from data_concierge.gateway import fairstore, onboarding_jobs
+
+    current = fairstore.load_settings()
+    options = request.model_dump()
+    if options.get("enrich") is None:
+        options["enrich"] = current["enrich"]
+    clash = fairstore.conflicting_portal(current["url"])
+    if clash:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"The Fair Store URL is the source portal '{clash}'; a mirror would "
+                "write into it. Point the Fair Store at its own CKAN first."
+            ),
+        )
+    chosen = [s for s in current["mirror_sites"] if ckan_sites_store.get_site(s)]
+    if request.site == "all" and current["mirror_sites"] and not chosen:
+        # Widening to every portal would not be what the saved subset asked for.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "None of the portals chosen under Mirror defaults is registered any "
+                "more. Choose portals again (or none, for every portal) and save."
+            ),
+        )
+    if request.site == "all" and chosen:
+        # "All" means the portals the settings choose, when they choose some
+        # (minus any since removed from the registry).
+        options["sites"] = chosen
+    try:
+        job = await onboarding_jobs.start_mirror_job(
+            options,
+            target_url=current["url"],
+            token=current["token"],
+            started_by=admin_user.get("user", "admin"),
+        )
+    except onboarding_jobs.JobError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    mode = "Mirror" if request.apply else "Dry run"
+    return {"message": f"{mode} started for {job['site_name']}", "job": job}
 
 
 # Public read-only endpoint — lets the UI populate a picker without admin auth.
@@ -4430,6 +4642,14 @@ def _validate_site(site: str) -> str:
             detail="Invalid site id; expected a lowercase slug (letters, digits, - and _).",
         )
     return site
+
+
+@router.get("/fairstore/info")
+async def fairstore_info() -> dict[str, Any]:
+    """Whether a Fair Store is linked, and its public address (no secrets)."""
+    from data_concierge.gateway import fairstore
+
+    return fairstore.public_info()
 
 
 @router.get("/fairstore/search")

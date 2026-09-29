@@ -32,8 +32,11 @@ from data_concierge.agents.llm_agent import (
     AGENT_LOG_FORMAT_VERSION,
     TOOLS,
     _operation_type_for_tool,
+    _remember_portal,
+    _site_id_for_url,
     _source_for_tool,
     _utc_now,
+    classify_tool_result,
     get_llm_agent,
 )
 from data_concierge.core.config import settings
@@ -252,6 +255,13 @@ async def edit_notebook(  # noqa: C901 - one linear tool loop, mirrors llm_agent
 
     portal_cfg = agent.get_portal_config(data_source)
     portal_url = portal_cfg.get("url", "")
+    # Fair Store chats: an ID fetched from an origin portal stays there (the
+    # model drops portal_id on follow-up calls), as in the analysis loop.
+    from data_concierge.gateway.fairstore import PORTAL_ID as FAIRSTORE_ID
+
+    portal_of_id: dict[str, str] | None = (
+        {} if FAIRSTORE_ID in (data_source, _site_id_for_url(portal_url)) else None
+    )
 
     mcp_tools = agent._get_mcp_tools()
     from data_concierge.agents.llm_agent import _STATIC_PORTAL_CONFIGS
@@ -408,16 +418,24 @@ async def edit_notebook(  # noqa: C901 - one linear tool loop, mirrors llm_agent
                         successful_calls += 1
                         result.tool_result_texts.append(result_text[:_MAX_TOOL_RESULT_CHARS])
                 else:
-                    result_text = await agent._execute_tool(tool_name, tool_input, portal_url)
-                    code = agent._code_for_tool(tool_name, tool_input, portal_url)
-                    source = _source_for_tool(tool_name, data_source)
+                    # The analysis loop's per-call steps: Fair Store routing, the
+                    # served portal and the code URL resolved before the call.
+                    result_text, code, served = await agent._run_portal_tool(
+                        tool_name, tool_input, portal_url, portal_of_id=portal_of_id
+                    )
+                    source = _source_for_tool(tool_name, served or data_source)
                     operation_type = _operation_type_for_tool(tool_name)
-                    is_error = result_text.startswith(("Error", "HTTP ", "SQL error"))
-                    if is_error:
+                    outcome = classify_tool_result(result_text)
+                    is_error = outcome != "retrieved"
+                    # A redirect or an absent capability fetched nothing and is
+                    # neither a success nor a failure (as in the analysis loop).
+                    if outcome == "error":
                         failed_calls += 1
-                    else:
+                    elif outcome == "retrieved":
                         successful_calls += 1
                         result.tool_result_texts.append(result_text[:_MAX_TOOL_RESULT_CHARS])
+                        if portal_of_id is not None and served:
+                            _remember_portal(tool_input, served, portal_of_id)
 
                 result_for_model = result_text[:_MAX_TOOL_RESULT_CHARS]
                 if code:

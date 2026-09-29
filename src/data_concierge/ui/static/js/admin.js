@@ -197,6 +197,19 @@ function setupEventListeners() {
     };
     wireRevealToggle('ghTokenToggle', 'ghToken', 'token');
     wireRevealToggle('ghWebhookSecretToggle', 'ghWebhookSecret', 'webhook secret');
+    wireRevealToggle('fsTokenToggle', 'fsToken', 'token');
+
+    // Fair Store
+    document.getElementById('fairstore-tab').addEventListener('shown.bs.tab', loadFairStore);
+    document.getElementById('fsRefreshBtn').addEventListener('click', loadFairStore);
+    document.getElementById('fsSettingsForm').addEventListener('submit', saveFairStoreSettings);
+    document.getElementById('fsMirrorForm').addEventListener('submit', startFairStoreMirror);
+    document.getElementById('fsMirrorApply').addEventListener('change', syncFairStoreMirrorLabel);
+    document.getElementById('fsChatSource').addEventListener('change', syncFairStoreChatFields);
+    document.getElementById('fsLogCloseBtn').addEventListener('click', closeFairStoreLog);
+    document.getElementById('fsCancelBtn').addEventListener('click', cancelFairStoreRun);
+    document.getElementById('fsSiteForm').addEventListener('submit', saveFairStoreSiteConfig);
+    document.getElementById('fsSiteReloadBtn').addEventListener('click', loadFairStoreSiteConfig);
     document.getElementById('ghPauseBtn').addEventListener('click', openPauseModal);
     document.getElementById('ghPauseConfirmBtn').addEventListener('click', confirmPauseToggle);
 }
@@ -2690,6 +2703,9 @@ function renderCkanSiteCard(site) {
         ? `<span class="badge bg-info text-dark"><i class="bi bi-building me-1"></i>${escapeHtml(site.organization)}</span>`
         : '';
     const isDefault = site.added_by === 'default';
+    // The Fair Store's chat-source entry follows its settings page; onboarding
+    // it would re-download files the source portals already profile.
+    const isManaged = site.managed_by === 'fairstore';
     // Portal type drives which tools work against this site, so it is shown
     // on the card rather than hidden behind an edit form.
     const portalType = (site.portal_type === 'dcat') ? 'dcat' : 'ckan';
@@ -2710,6 +2726,7 @@ function renderCkanSiteCard(site) {
                             ${typeBadge}
                             ${orgBadge}
                             ${isDefault ? '<span class="badge bg-secondary border">built-in</span>' : ''}
+                            ${isManaged ? '<span class="badge bg-light text-dark border"><i class="bi bi-archive me-1"></i>managed on the Fair Store page</span>' : ''}
                         </div>
                         <p class="small mb-1">
                             <a href="${escapeHtml(site.url)}" target="_blank" rel="noopener"
@@ -2728,16 +2745,16 @@ function renderCkanSiteCard(site) {
                         </p>
                     </div>
                     <div class="d-flex gap-2 ms-3 flex-shrink-0">
-                        <button class="btn btn-sm btn-outline-primary js-ckan-onboard"
+                        ${isManaged ? '' : `<button class="btn btn-sm btn-outline-primary js-ckan-onboard"
                                 data-site-id="${idSafe}" data-portal-type="${portalType}"
                                 data-site-name="${escapeHtml(site.name || '')}"
                                 title="Download and profile this portal's datasets">
                             <i class="bi bi-database-down me-1"></i>Onboard
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger js-ckan-remove"
+                        </button>`}
+                        ${isManaged ? '' : `<button class="btn btn-sm btn-outline-danger js-ckan-remove"
                                 data-site-id="${idSafe}" title="Remove site">
                             <i class="bi bi-trash"></i>
-                        </button>
+                        </button>`}
                     </div>
                 </div>
             </div>
@@ -3023,6 +3040,7 @@ async function pollOnboardingLog() {
     try {
         const response = await adminFetch(`${ONBOARD_API}/${encodeURIComponent(jobId)}?log_offset=${_onboardLogOffset}`);
         const { job } = await response.json();
+        if (jobId !== _onboardLogJobId) return;  // switched jobs while waiting
 
         const pre = document.getElementById('onboardLog');
         if (job.log && job.log.length) {
@@ -3064,8 +3082,486 @@ async function cancelOnboardingJob() {
     try {
         await adminFetch(`${ONBOARD_API}/${encodeURIComponent(_onboardLogJobId)}/cancel`, { method: 'POST' });
         showToast('Run cancelled', 'success');
+        stopOnboardingPoll();  // one poll chain only, or log lines repeat
         pollOnboardingLog();
     } catch (error) {
         showToast(`Could not cancel: ${error.message}`, 'danger');
+    }
+}
+
+
+// =============================================================================
+// Fair Store — the CKAN that mirrors every registered portal
+// =============================================================================
+
+const FAIRSTORE_API = `${API_BASE}/admin/fairstore`;
+
+let _fsSettings = null;
+let _fsLogJobId = null;
+let _fsLogOffset = 0;
+let _fsPollTimer = null;
+
+function _fsAlert(targetId, type, msg) {
+    const box = document.getElementById(targetId);
+    if (!box) return;
+    box.innerHTML = msg
+        ? `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+               ${escapeHtml(msg)}
+               <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+           </div>`
+        : '';
+}
+
+async function loadFairStore() {
+    try {
+        const [settingsRes, sitesRes] = await Promise.all([
+            adminFetch(FAIRSTORE_API),
+            adminFetch(CKAN_SITES_API),
+        ]);
+        _fsSettings = (await settingsRes.json()).settings;
+        const sites = ((await sitesRes.json()).sites || []).filter(site => site.id !== 'fairstore');
+        renderFairStoreSettings(_fsSettings, sites);
+    } catch (error) {
+        _fsAlert('fsAlert', 'danger', `Could not load the Fair Store settings: ${error.message}`);
+        return;
+    }
+    loadFairStoreStatus();
+    loadFairStoreJobs();
+    if (_fsSettings.configured && _fsSettings.token_set) {
+        loadFairStoreSiteConfig();
+    } else {
+        document.getElementById('fsSiteFields').textContent =
+            'Set the URL and a sysadmin token to edit these.';
+        document.getElementById('fsSiteActions').classList.add('d-none');
+    }
+}
+
+function renderFairStoreSettings(settings, sites) {
+    document.getElementById('fsUrl').value = settings.url || '';
+    document.getElementById('fsToken').value = '';
+    document.getElementById('fsClearToken').checked = false;
+    document.getElementById('fsClearTokenWrap').classList.toggle('d-none', settings.token_source !== 'admin');
+    const tokenHint = document.getElementById('fsTokenHint');
+    if (settings.token_set) {
+        const from = settings.token_source === 'environment' ? ' (from the FAIRSTORE_API_KEY environment variable)' : '';
+        tokenHint.textContent = `A token ending ${settings.token_masked.replace(/•/g, '')} is set${from}. Leave blank to keep it.`;
+    } else {
+        tokenHint.textContent = 'No token is set: mirror runs can only be dry runs, and site settings cannot be edited.';
+    }
+    document.getElementById('fsUrlHint').textContent = settings.url_source === 'environment'
+        ? 'From the FAIRSTORE_URL environment variable. Saving here overrides it.'
+        : 'The address people and Verikan use. Must be https:// unless it is on this machine.';
+
+    document.getElementById('fsChatSource').checked = !!settings.chat_source;
+    document.getElementById('fsPortalName').value = settings.portal_name || '';
+    document.getElementById('fsPortalDescription').value = settings.portal_description || '';
+    document.getElementById('fsEnrichDefault').checked = settings.enrich !== false;
+    document.getElementById('fsMirrorEnrich').checked = settings.enrich !== false;
+    syncFairStoreChatFields();
+
+    const chosen = new Set(settings.mirror_sites || []);
+    const missing = settings.mirror_sites_missing || [];
+    document.getElementById('fsMirrorSites').innerHTML = (sites.map(site => `
+        <div class="form-check form-check-inline">
+            <input class="form-check-input fs-mirror-site" type="checkbox" id="fsSite-${escapeHtml(site.id)}"
+                   value="${escapeHtml(site.id)}" ${chosen.has(site.id) ? 'checked' : ''}>
+            <label class="form-check-label small" for="fsSite-${escapeHtml(site.id)}">${escapeHtml(site.name || site.id)}</label>
+        </div>`).join('') || '<span class="small text-muted">No portals are registered.</span>') +
+        (missing.length
+            ? `<div class="small text-warning mt-1"><i class="bi bi-exclamation-triangle me-1"></i>No longer registered:
+               ${escapeHtml(missing.join(', '))}. Save to update the defaults.</div>`
+            : '');
+    if (settings.conflicting_portal) {
+        _fsAlert('fsAlert', 'danger',
+            `The Fair Store URL is the registered portal "${settings.conflicting_portal}". ` +
+            'Mirror runs and site-settings edits are refused until it points at its own CKAN.');
+    } else {
+        _fsAlert('fsAlert', '', '');
+    }
+
+    const select = document.getElementById('fsMirrorSite');
+    const current = select.value;
+    const allLabel = chosen.size
+        ? `All portals (${[...chosen].join(', ')})`
+        : (missing.length ? 'Saved portals (none registered — update Mirror defaults)' : 'All portals');
+    select.innerHTML = `<option value="all">${escapeHtml(allLabel)}</option>` + sites.map(site =>
+        `<option value="${escapeHtml(site.id)}">${escapeHtml(site.name || site.id)}</option>`).join('');
+    if ([...select.options].some(o => o.value === current)) select.value = current;
+
+    const open = document.getElementById('fsOpenLink');
+    if (settings.url) {
+        open.href = settings.url;
+        open.classList.remove('d-none');
+    } else {
+        open.classList.add('d-none');
+    }
+    const updated = document.getElementById('fsUpdatedHint');
+    updated.textContent = settings.updated_at
+        ? `Last saved ${new Date(settings.updated_at).toLocaleString()}${settings.updated_by ? ` by ${settings.updated_by}` : ''}.`
+        : '';
+    syncFairStoreMirrorLabel();
+}
+
+function syncFairStoreChatFields() {
+    document.getElementById('fsChatFields').classList.toggle('d-none', !document.getElementById('fsChatSource').checked);
+}
+
+function syncFairStoreMirrorLabel() {
+    const apply = document.getElementById('fsMirrorApply').checked;
+    document.getElementById('fsMirrorStartLabel').textContent = apply ? 'Start mirror' : 'Start dry run';
+    const btn = document.getElementById('fsMirrorStartBtn');
+    btn.classList.toggle('btn-primary', !apply);
+    btn.classList.toggle('btn-warning', apply);
+}
+
+async function saveFairStoreSettings(e) {
+    e.preventDefault();
+    const payload = {
+        url: document.getElementById('fsUrl').value.trim(),
+        chat_source: document.getElementById('fsChatSource').checked,
+        portal_name: document.getElementById('fsPortalName').value.trim(),
+        portal_description: document.getElementById('fsPortalDescription').value.trim(),
+        mirror_sites: [...document.querySelectorAll('.fs-mirror-site:checked')].map(el => el.value),
+        enrich: document.getElementById('fsEnrichDefault').checked,
+    };
+    const token = document.getElementById('fsToken').value.trim();
+    if (token) payload.token = token;
+    if (document.getElementById('fsClearToken').checked) payload.clear_token = true;
+
+    const btn = document.getElementById('fsSaveBtn');
+    btn.disabled = true;
+    try {
+        const response = await adminFetch(FAIRSTORE_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        const hadToken = !!(_fsSettings && _fsSettings.token_set);
+        _fsSettings = data.settings;
+        showToast(data.message || 'Fair Store settings saved', 'success');
+        const tokenDropped = hadToken && !token && !payload.clear_token && !_fsSettings.token_set;
+        // After the reload: renderFairStoreSettings resets the alert box.
+        await loadFairStore();
+        if (tokenDropped && !_fsSettings.conflicting_portal) {
+            _fsAlert('fsAlert', 'warning',
+                'The saved token was removed because the URL now points at a different server ' +
+                '(host or port). Enter a token for the new Fair Store.');
+        }
+    } catch (error) {
+        showToast(`Could not save: ${error.message}`, 'danger');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function _fsNumber(n) {
+    return (n === null || n === undefined) ? '—' : Number(n).toLocaleString();
+}
+
+async function loadFairStoreStatus() {
+    const box = document.getElementById('fsStatus');
+    try {
+        const response = await adminFetch(`${FAIRSTORE_API}/status`);
+        const st = await response.json();
+        if (!st.configured) {
+            box.innerHTML = `<div class="alert alert-secondary mb-0">
+                <i class="bi bi-info-circle me-1"></i>No Fair Store is linked yet. Enter its URL under
+                <strong>Connection</strong> below.</div>`;
+            return;
+        }
+        if (!st.reachable) {
+            box.innerHTML = `<div class="alert alert-danger mb-0">
+                <i class="bi bi-x-octagon me-1"></i><strong>Unreachable:</strong> ${escapeHtml(st.url)}
+                <div class="small mt-1">${escapeHtml(st.error || '')}</div></div>`;
+            return;
+        }
+        const tokenBadge = {
+            sysadmin: '<span class="badge bg-success"><i class="bi bi-key me-1"></i>Sysadmin token OK</span>',
+            rejected: '<span class="badge bg-danger"><i class="bi bi-key me-1"></i>Token rejected</span>',
+            missing: '<span class="badge bg-secondary"><i class="bi bi-key me-1"></i>No token (read-only)</span>',
+        }[st.token] || '';
+        const byPortal = (st.by_portal || []).map(p => `
+            <tr><td>${escapeHtml(p.name)}</td><td><code class="small">${escapeHtml(p.site_id)}</code></td>
+                <td class="text-end">${_fsNumber(p.datasets)}</td></tr>`).join('');
+        const last = st.last_mirror_run;
+        const lastLine = last
+            ? `Last mirror run: ${onboardStatusBadge(last.status)} ${escapeHtml(last.site_name || '')}
+               ${last.options && last.options.apply ? '' : '<span class="badge bg-light text-dark border">dry run</span>'}
+               <span class="text-muted">${last.started_at ? escapeHtml(new Date(last.started_at).toLocaleString()) : ''}</span>`
+            : 'No mirror run from this panel yet.';
+        box.innerHTML = `
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Reachable</span>
+                <span class="badge bg-light text-dark border">CKAN ${escapeHtml(st.ckan_version || '?')}</span>
+                ${tokenBadge}
+                <a class="small ms-1" href="${escapeHtml(st.url)}" target="_blank" rel="noopener">${escapeHtml(st.url)}</a>
+            </div>
+            ${st.token === 'rejected' ? `<div class="alert alert-warning py-2 small">${escapeHtml(st.token_error || 'The Fair Store refused the saved token.')}</div>` : ''}
+            <div class="row g-3 mb-3">
+                <div class="col-4 col-md-2"><div class="text-muted small">Datasets</div><div class="fs-5 fw-semibold">${_fsNumber(st.datasets)}</div></div>
+                <div class="col-4 col-md-2"><div class="text-muted small">Organizations</div><div class="fs-5 fw-semibold">${_fsNumber(st.organizations)}</div></div>
+                <div class="col-4 col-md-2"><div class="text-muted small">Groups</div><div class="fs-5 fw-semibold">${_fsNumber(st.groups)}</div></div>
+            </div>
+            ${byPortal ? `<div class="table-responsive pane-narrow"><table class="table table-sm align-middle mb-2">
+                <thead><tr><th>Mirrored from</th><th>Portal ID</th><th class="text-end">Datasets</th></tr></thead>
+                <tbody>${byPortal}</tbody></table></div>` : ''}
+            <div class="small">${lastLine}</div>`;
+    } catch (error) {
+        box.innerHTML = `<div class="alert alert-danger mb-0">Could not check the Fair Store: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+async function startFairStoreMirror(e) {
+    e.preventDefault();
+    const apply = document.getElementById('fsMirrorApply').checked;
+    const siteSelect = document.getElementById('fsMirrorSite');
+    const target = siteSelect.options[siteSelect.selectedIndex]?.text || 'All portals';
+    if (apply && !confirm(`Write ${target} into the Fair Store?\n\nOnly records that changed at the source are written. ` +
+                          'Records the source withdrew are reported, not deleted.')) {
+        return;
+    }
+    const limitRaw = document.getElementById('fsMirrorLimit').value;
+    const payload = {
+        site: siteSelect.value || 'all',
+        apply,
+        enrich: document.getElementById('fsMirrorEnrich').checked,
+        limit: limitRaw ? Number(limitRaw) : null,
+    };
+    const btn = document.getElementById('fsMirrorStartBtn');
+    btn.disabled = true;
+    try {
+        const response = await adminFetch(`${FAIRSTORE_API}/mirror-jobs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        showToast(data.message || 'Mirror run started', 'success');
+        await loadFairStoreJobs();
+        if (data.job?.id) watchFairStoreJob(data.job.id);
+    } catch (error) {
+        showToast(`Could not start the run: ${error.message}`, 'danger');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function loadFairStoreJobs() {
+    const container = document.getElementById('fsJobList');
+    try {
+        const response = await adminFetch(`${FAIRSTORE_API}/mirror-jobs`);
+        const data = await response.json();
+        document.getElementById('fsMirrorWarnings').innerHTML = (data.warnings || []).map(w =>
+            `<div class="alert alert-warning py-2 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(w)}</div>`).join('');
+        if (!data.jobs || data.jobs.length === 0) {
+            container.innerHTML = '<div class="empty-state text-muted small py-3">No mirror runs yet.</div>';
+            return;
+        }
+        container.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Portals</th><th>Mode</th><th>Status</th><th>Started</th><th>Duration</th><th>Started by</th><th></th></tr></thead>
+                    <tbody>
+                        ${data.jobs.map(job => `
+                            <tr>
+                                <td>${escapeHtml(job.site_name || job.site_id || '')}</td>
+                                <td>${job.options && job.options.apply
+                                    ? '<span class="badge bg-warning text-dark">write</span>'
+                                    : '<span class="badge bg-light text-dark border">dry run</span>'}</td>
+                                <td>${onboardStatusBadge(job.status)}
+                                    ${job.error ? `<div class="small text-danger">${escapeHtml(job.error)}</div>` : ''}</td>
+                                <td class="small">${job.started_at ? escapeHtml(new Date(job.started_at).toLocaleString()) : ''}</td>
+                                <td class="small">${escapeHtml(_onboardDuration(job))}</td>
+                                <td class="small">${escapeHtml(job.started_by || '')}</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-secondary js-fs-log" data-job-id="${escapeHtml(job.id)}">
+                                        <i class="bi bi-terminal me-1"></i>Details
+                                    </button>
+                                </td>
+                            </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        bindClick(container, '.js-fs-log', (el) => watchFairStoreJob(el.dataset.jobId));
+    } catch (error) {
+        container.innerHTML = `<div class="alert alert-danger">Failed to load mirror runs: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+function stopFairStorePoll() {
+    if (_fsPollTimer) {
+        clearTimeout(_fsPollTimer);
+        _fsPollTimer = null;
+    }
+}
+
+function closeFairStoreLog() {
+    stopFairStorePoll();
+    _fsLogJobId = null;
+    document.getElementById('fsLogPanel').classList.add('d-none');
+}
+
+function watchFairStoreJob(jobId) {
+    if (_fsLogJobId !== jobId) {
+        _fsLogOffset = 0;
+        document.getElementById('fsLog').textContent = '';
+        document.getElementById('fsResult').innerHTML = '';
+    }
+    _fsLogJobId = jobId;
+    document.getElementById('fsLogPanel').classList.remove('d-none');
+    document.getElementById('fsLogTitle').textContent = `Mirror run ${jobId}`;
+    stopFairStorePoll();
+    pollFairStoreLog();
+}
+
+function renderFairStoreResult(result) {
+    const box = document.getElementById('fsResult');
+    if (!result) {
+        box.innerHTML = '';
+        return;
+    }
+    if (!Array.isArray(result) && result.error) {
+        box.innerHTML = `<div class="alert alert-danger py-2 small mb-0">${escapeHtml(result.error)}</div>`;
+        return;
+    }
+    const rows = (Array.isArray(result) ? result : [result]).map(r => {
+        if (r.error) {
+            return `<tr><td><code>${escapeHtml(r.site)}</code></td><td colspan="6" class="text-danger small">${escapeHtml(r.error)}</td></tr>`;
+        }
+        if (r.skipped) {
+            return `<tr><td><code>${escapeHtml(r.site)}</code></td><td colspan="6" class="text-muted small">Skipped: ${escapeHtml(r.skipped)}</td></tr>`;
+        }
+        const q = r.qsv || {};
+        const withdrawn = r.withdrawn_at_source ? (r.withdrawn_at_source.datasets || 0) : null;
+        return `<tr>
+            <td><code>${escapeHtml(r.site)}</code></td>
+            <td class="text-end">${_fsNumber(r.datasets)}</td>
+            <td class="text-end">${_fsNumber(r.created)}</td>
+            <td class="text-end">${_fsNumber(r.updated)}</td>
+            <td class="text-end">${_fsNumber(r.unchanged)}</td>
+            <td class="text-end small">${_fsNumber(q.created)} / ${_fsNumber(q.refreshed)} / ${_fsNumber(q.unchanged)}</td>
+            <td class="text-end">${withdrawn === null ? '—' : _fsNumber(withdrawn)}</td>
+        </tr>`;
+    }).join('');
+    const mode = (Array.isArray(result) ? result[0] : result)?.mode === 'apply' ? 'Written' : 'Planned (dry run)';
+    box.innerHTML = `
+        <div class="small text-muted mb-1">${escapeHtml(mode)}</div>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Portal</th><th class="text-end">Datasets</th><th class="text-end">Created</th>
+                <th class="text-end">Updated</th><th class="text-end">Unchanged</th>
+                <th class="text-end">qsv new / refreshed / same</th><th class="text-end">Withdrawn at source</th></tr></thead>
+            <tbody>${rows}</tbody></table></div>`;
+}
+
+async function pollFairStoreLog() {
+    const jobId = _fsLogJobId;
+    if (!jobId) return;
+    try {
+        const response = await adminFetch(`${ONBOARD_API}/${encodeURIComponent(jobId)}?log_offset=${_fsLogOffset}`);
+        const { job } = await response.json();
+        if (jobId !== _fsLogJobId) return;  // switched jobs while waiting
+
+        const pre = document.getElementById('fsLog');
+        if (job.log && job.log.length) {
+            const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+            pre.textContent += job.log.join('\n') + '\n';
+            if (atBottom) pre.scrollTop = pre.scrollHeight;
+        }
+        _fsLogOffset = job.log_next_offset ?? _fsLogOffset;
+        document.getElementById('fsLogStatus').innerHTML = onboardStatusBadge(job.status) +
+            (job.options && !job.options.apply ? ' <span class="badge bg-light text-dark border">dry run</span>' : '');
+        const isRunning = job.status === 'running';
+        document.getElementById('fsCancelBtn').classList.toggle('d-none', !isRunning);
+        renderFairStoreResult(job.result);
+
+        if (isRunning) {
+            _fsPollTimer = setTimeout(pollFairStoreLog, 2000);
+        } else {
+            stopFairStorePoll();
+            loadFairStoreJobs();
+            loadFairStoreStatus();
+        }
+    } catch (error) {
+        stopFairStorePoll();
+        document.getElementById('fsLogStatus').innerHTML =
+            `<span class="text-danger small">Lost contact: ${escapeHtml(error.message)}</span>`;
+    }
+}
+
+async function cancelFairStoreRun() {
+    if (!_fsLogJobId) return;
+    if (!confirm('Cancel this mirror run?\n\nWhat it already wrote stays; a rerun picks up the rest.')) return;
+    try {
+        await adminFetch(`${ONBOARD_API}/${encodeURIComponent(_fsLogJobId)}/cancel`, { method: 'POST' });
+        showToast('Run cancelled', 'success');
+        stopFairStorePoll();  // one poll chain only, or log lines repeat
+        pollFairStoreLog();
+    } catch (error) {
+        showToast(`Could not cancel: ${error.message}`, 'danger');
+    }
+}
+
+async function loadFairStoreSiteConfig() {
+    const fields = document.getElementById('fsSiteFields');
+    const actions = document.getElementById('fsSiteActions');
+    fields.innerHTML = '<div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>Reading from the Fair Store…';
+    try {
+        const response = await adminFetch(`${FAIRSTORE_API}/site-config`);
+        renderFairStoreSiteConfig(await response.json());
+        _fsAlert('fsSiteAlert', '', '');
+    } catch (error) {
+        fields.innerHTML = '';
+        actions.classList.add('d-none');
+        _fsAlert('fsSiteAlert', 'warning', `Could not read the site settings: ${error.message}`);
+    }
+}
+
+function renderFairStoreSiteConfig(config) {
+    const fields = document.getElementById('fsSiteFields');
+    const options = config.options || [];
+    fields.classList.remove('text-muted', 'small');
+    fields.innerHTML = options.map(opt => {
+        const id = `fsOpt-${opt.key.replace(/[^a-z0-9]/gi, '-')}`;
+        const value = escapeHtml(opt.value || '');
+        const input = opt.kind === 'text'
+            ? `<input type="text" class="form-control fs-site-opt" id="${id}" data-key="${escapeHtml(opt.key)}" value="${value}">`
+            : `<textarea class="form-control fs-site-opt ${opt.kind === 'code' ? 'font-monospace' : ''}" id="${id}"
+                   data-key="${escapeHtml(opt.key)}" rows="${opt.kind === 'code' ? 6 : 4}">${value}</textarea>`;
+        return `<div class="mb-3">
+            <label class="form-label" for="${id}">${escapeHtml(opt.label)} <code class="small text-muted">${escapeHtml(opt.key)}</code></label>
+            ${input}
+        </div>`;
+    }).join('') || '<div class="text-muted small">The Fair Store exposes no editable site settings.</div>';
+    fields.querySelectorAll('.fs-site-opt').forEach(el => { el.dataset.original = el.value; });
+    document.getElementById('fsSiteActions').classList.toggle('d-none', options.length === 0);
+}
+
+async function saveFairStoreSiteConfig(e) {
+    e.preventDefault();
+    const changed = {};
+    document.querySelectorAll('.fs-site-opt').forEach(el => {
+        if (el.value !== el.dataset.original) changed[el.dataset.key] = el.value;
+    });
+    if (Object.keys(changed).length === 0) {
+        showToast('Nothing changed', 'info');
+        return;
+    }
+    const btn = document.getElementById('fsSiteSaveBtn');
+    btn.disabled = true;
+    try {
+        const response = await adminFetch(`${FAIRSTORE_API}/site-config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ options: changed }),
+        });
+        const data = await response.json();
+        renderFairStoreSiteConfig(data);
+        showToast(data.message || 'Site settings saved', 'success');
+        loadFairStoreStatus();
+    } catch (error) {
+        _fsAlert('fsSiteAlert', 'danger', `Could not save: ${error.message}`);
+    } finally {
+        btn.disabled = false;
     }
 }
