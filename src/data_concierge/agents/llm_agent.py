@@ -153,6 +153,16 @@ def _source_for_tool(tool_name: str, data_source: str) -> str:
     return f"ckan:{data_source}"
 
 
+def _registered_config(site_id: str) -> dict[str, Any] | None:
+    """A registered portal's config, or ``None``."""
+    try:
+        from data_concierge.gateway import ckan_sites
+
+        return ckan_sites.get_portal_config(site_id)
+    except Exception:  # pragma: no cover - registry failures are non-fatal
+        return None
+
+
 def _sources_from_trace(
     tool_calls_trace: list[dict[str, Any]],
     data_source: str,
@@ -161,7 +171,9 @@ def _sources_from_trace(
 ) -> list[DataSource]:
     """The data sources a run actually touched, in first-use order.
 
-    A CKAN tool call attributes the primary portal; an ``mcp__{server}__*``
+    A CKAN tool call attributes the portal that served it (``portal_id`` on the
+    trace entry: an override, or a Fair Store load routed to its origin), else
+    the primary portal; an ``mcp__{server}__*``
     call attributes that server (named from ``_STATIC_PORTAL_CONFIGS`` when
     registered there). Falls back to the nominal portal when no tool ran, so
     citations are never empty.
@@ -188,11 +200,15 @@ def _sources_from_trace(
             else:
                 add(server_id, f"MCP server: {server_id}", "", 0.85)
         else:
+            served = str(entry.get("portal_id") or data_source)
+            cfg = portal_cfg if served == data_source else _registered_config(served)
+            if cfg is None:
+                served, cfg = data_source, portal_cfg
             add(
-                data_source,
-                portal_cfg.get("name", data_source),
-                portal_url,
-                portal_cfg.get("quality_score", 0.85),
+                served,
+                cfg.get("name", served),
+                portal_url if served == data_source else cfg.get("url", ""),
+                cfg.get("quality_score", 0.85),
             )
 
     if not sources:
@@ -281,6 +297,118 @@ _SQL_ENDPOINT_DEAD_STATUSES = frozenset({401, 403, 404, 405, 501})
 _SQL_DISABLED_TTL_SECONDS = 30 * 60
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _sql_action_missing(resp: httpx.Response) -> bool:
+    """CKAN's answer when DataStore SQL is disabled, not when a query is bad.
+
+    A portal without ``ckan.datastore.sqlsearch.enabled`` (the Fair Store's
+    default) replies 400 "Action name not known: datastore_search_sql" — the
+    same status as a bad statement, so the status alone would keep it
+    retryable and the model would try again every turn.
+    """
+    return resp.status_code == 400 and "Action name not known" in resp.text[:2000]
+
+
+# Results that retrieved nothing (see the accounting in the tool loop).
+_NOT_RETRIEVED_PREFIXES = ("Error", "HTTP ", "SQL error", "Tool unavailable:", "Rows elsewhere:")
+
+
+def classify_tool_result(text: str) -> str:
+    """``retrieved``, ``error``, ``unavailable`` or ``redirected``.
+
+    "Error" (not "Error:"): MCP failures read "Error calling ...".
+    notebook_generator._NOTHING_FETCHED uses the same prefixes.
+    """
+    if text.startswith(LLMAnalysisAgent.TOOL_UNAVAILABLE_PREFIX):
+        return "unavailable"
+    if text.startswith(LLMAnalysisAgent.TOOL_REDIRECT_PREFIX):
+        return "redirected"
+    if text.startswith(("Error", "HTTP ", "SQL error")):
+        return "error"
+    return "retrieved"
+
+
+def _normalize_load_args(tool_name: str, tool_input: Any) -> None:
+    """Repair ``fields`` sent as a JSON string (``'["NAME", "ACRES"]'``), which
+    DataStore rejects, before the call and the notebook both use it."""
+    if tool_name != "load_resource_data" or not isinstance(tool_input, dict):
+        return
+    fields = tool_input.get("fields")
+    if isinstance(fields, str):
+        try:
+            parsed = json.loads(fields)
+        except ValueError:
+            parsed = [part.strip() for part in fields.split(",") if part.strip()]
+        tool_input["fields"] = [str(f) for f in parsed] if isinstance(parsed, list) else fields
+
+
+_ID_ARGS = ("dataset_id", "resource_id")
+
+
+def _is_tabular(resource: dict[str, Any]) -> bool:
+    """Whether a mirrored DCAT resource is a CSV/TSV file."""
+    from data_concierge.data_layer.connectors.dcat import _TABULAR_MEDIA_TYPES
+
+    mimetype = str(resource.get("mimetype") or "").split(";")[0].strip().lower()
+    fmt = str(resource.get("format") or "").strip().upper()
+    return mimetype in _TABULAR_MEDIA_TYPES or fmt in ("CSV", "TSV")
+
+
+def _result_of(resp: httpx.Response) -> Any:
+    """An action response's ``result``, or ``None`` for anything unexpected."""
+    if not resp.is_success:
+        return None
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    return body.get("result") if isinstance(body, dict) else None
+
+
+def _remember_portal(tool_input: Any, portal: str, portal_of_id: dict[str, str]) -> None:
+    """Record that ``portal`` answered a successful call about these IDs.
+
+    ``portal`` is captured before the call: ``_execute_tool`` pops
+    ``portal_id`` from the input.
+    """
+    if not isinstance(tool_input, dict):
+        return
+    for key in _ID_ARGS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value:
+            portal_of_id[value] = portal
+
+
+def _stick_to_portal(tool_input: Any, portal_of_id: dict[str, str]) -> None:
+    """Send a call with no ``portal_id`` where its ID was last fetched from.
+
+    An explicit ``portal_id`` always wins; this only fills one the model left
+    out for an ID it already used on another portal in this run.
+    """
+    if not isinstance(tool_input, dict) or tool_input.get("portal_id"):
+        return
+    for key in _ID_ARGS:
+        portal = portal_of_id.get(str(tool_input.get(key) or ""))
+        if portal:
+            tool_input["portal_id"] = portal
+            return
+
+
+def _int_param(params: dict, key: str, default: int, *, cap: int, floor: int = 1) -> int:
+    """A numeric tool argument, tolerating the model sending ``"100"``.
+
+    A value below ``floor`` means "use the default", as ``int(x or default)``
+    did before; CKAN loads pass ``floor=0`` because ``limit=0`` is a
+    count-only DataStore query.
+    """
+    try:
+        value = int(params.get(key, default))
+    except (TypeError, ValueError, OverflowError):
+        value = default
+    if value < floor:
+        value = default
+    return min(value, cap)
 
 
 def _summarize_error_body(text: str, limit: int = 200) -> str:
@@ -770,6 +898,49 @@ class LLMAnalysisAgent(BaseAgent):
 
     # -- tool execution ----------------------------------------------------
 
+    async def _run_portal_tool(
+        self,
+        tool_name: str,
+        tool_input: Any,
+        portal_url: str,
+        *,
+        portal_of_id: dict[str, str] | None = None,
+    ) -> tuple[str, str, str | None]:
+        """One portal tool call, as both the analysis loop and the notebook editor run it.
+
+        Repairs the model's arguments, fills a dropped ``portal_id`` from
+        ``portal_of_id`` (Fair Store chats), routes a Fair Store row load to
+        its origin, and resolves — before :meth:`_execute_tool` pops
+        ``portal_id`` — the portal the call reaches, so the notebook code and
+        the attribution name the portal that answered. Returns ``(result_text,
+        code, served_portal_id)``; the last is ``None`` for the primary portal.
+        """
+        _normalize_load_args(tool_name, tool_input)
+        if portal_of_id is not None:
+            _stick_to_portal(tool_input, portal_of_id)
+        routed_from = await self._route_to_origin(tool_name, tool_input, portal_url)
+        code_url = self._tool_portal_url(tool_input, portal_url)
+        served: str | None = None
+        if isinstance(tool_input, dict) and tool_input.get("portal_id"):
+            # The registry ID of the URL actually called: canonical case, and an
+            # unknown portal_id names the portal _execute_tool fell back to.
+            served = _site_id_for_url(code_url) or str(tool_input["portal_id"])
+        result_text = await self._execute_tool(tool_name, tool_input, portal_url)
+        if routed_from and classify_tool_result(result_text) == "retrieved":
+            # Only on success: a failed routed load keeps its error prefix.
+            result_text = f"{routed_from}\n{result_text}"
+        code = self._code_for_tool(tool_name, tool_input, code_url)
+        return result_text, code, served
+
+    def _tool_portal_url(self, tool_input: Any, portal_url: str) -> str:
+        """The portal a tool call will reach: its ``portal_id``, else the primary."""
+        override_id = tool_input.get("portal_id") if isinstance(tool_input, dict) else None
+        if override_id:
+            override_url = (self.get_portal_config(override_id) or {}).get("url")
+            if override_url:
+                return str(override_url)
+        return portal_url
+
     async def _execute_tool(
         self,
         tool_name: str,
@@ -856,7 +1027,7 @@ class LLMAnalysisAgent(BaseAgent):
         querying.
         """
         query = params.get("query", "")
-        n_results = min(params.get("n_results", 10), 20)
+        n_results = _int_param(params, "n_results", 10, cap=20)
 
         if not query:
             return "Error: query parameter is required"
@@ -933,7 +1104,7 @@ class LLMAnalysisAgent(BaseAgent):
 
     async def _tool_dcat_search(self, dcat: Any, params: dict) -> str:
         query = params.get("query", "")
-        rows = min(int(params.get("rows", 10) or 10), 20)
+        rows = _int_param(params, "rows", 10, cap=20)
 
         matches = await dcat.search_datasets(query, limit=rows)
         if not matches:
@@ -970,7 +1141,7 @@ class LLMAnalysisAgent(BaseAgent):
         ds = await dcat.get_dataset(dataset_id)
         if ds is None:
             return (
-                f"Dataset '{dataset_id}' not found in the {dcat.portal_url} catalog. "
+                f"Error: dataset '{dataset_id}' not found in the {dcat.portal_url} catalog. "
                 "Use search_datasets first and pass a Dataset ID from its results."
             )
 
@@ -1022,7 +1193,7 @@ class LLMAnalysisAgent(BaseAgent):
         get_dataset_info.
         """
         resource_id = str(params.get("resource_id") or "").strip()
-        limit = min(int(params.get("limit", 100) or 100), 1000)
+        limit = _int_param(params, "limit", 100, cap=1000)
         if not resource_id:
             return "Error: resource_id is required (a dataset ID or a distribution URL)."
 
@@ -1034,13 +1205,13 @@ class LLMAnalysisAgent(BaseAgent):
             ds = await dcat.get_dataset(resource_id)
             if ds is None:
                 return (
-                    f"Dataset '{resource_id}' not found in the {dcat.portal_url} "
+                    f"Error: dataset '{resource_id}' not found in the {dcat.portal_url} "
                     "catalog. Use search_datasets to find a valid Dataset ID."
                 )
             tabular = ds.tabular_distributions
             if not tabular:
                 return (
-                    f"Dataset '{ds.title}' has no tabular (CSV/TSV) distribution, "
+                    f"Error: dataset '{ds.title}' has no tabular (CSV/TSV) distribution, "
                     "so its rows cannot be loaded."
                 )
             target_url = tabular[0].best_url
@@ -1053,7 +1224,7 @@ class LLMAnalysisAgent(BaseAgent):
         rows = result["rows"]
         if not rows:
             return (
-                f"No rows returned from {target_url} "
+                f"Error: no rows returned from {target_url} "
                 f"({result['bytes_read']:,} bytes read)."
             )
 
@@ -1083,7 +1254,7 @@ class LLMAnalysisAgent(BaseAgent):
     async def _tool_search(self, client: httpx.AsyncClient, params: dict) -> str:
         query = params.get("query", "")
         org = params.get("organization")
-        rows = min(params.get("rows", 10), 20)
+        rows = _int_param(params, "rows", 10, cap=20)
 
         search_params: dict[str, Any] = {"q": query, "rows": rows}
         if org:
@@ -1141,6 +1312,20 @@ class LLMAnalysisAgent(BaseAgent):
         if tags:
             lines.append(f"Tags: {', '.join(tags)}")
 
+        extras = {
+            str(e.get("key")): e.get("value")
+            for e in pkg.get("extras") or []
+            if isinstance(e, dict) and e.get("key")
+        }
+        origin_id = str(extras.get("mirror_source_portal") or "")
+        origin = self._mirror_origin(origin_id)
+        if origin_id:
+            # A Fair Store record: metadata here, rows at the portal it mirrors.
+            label = origin["name"] if origin else extras.get("mirror_source_url") or origin_id
+            lines.append(f"Mirrored from: {label} (portal_id `{origin_id}`)")
+            if extras.get("qsv_description"):
+                lines.append(f"AI summary (qsv): {str(extras['qsv_description'])[:500]}")
+
         resources = pkg.get("resources", [])
         lines.append(f"\nResources ({len(resources)}):")
         for i, res in enumerate(resources, 1):
@@ -1150,15 +1335,71 @@ class LLMAnalysisAgent(BaseAgent):
             lines.append(f"     Format: {res.get('format', '?')}  DataStore: {ds}")
             if res.get("description"):
                 lines.append(f"     {res['description'][:150]}")
+            route = self._origin_route(res, origin)
+            if route:
+                lines.append(f"     Rows: {route}")
         return "\n".join(lines)
+
+    def _mirror_origin(self, origin_id: str) -> dict[str, Any] | None:
+        """The registered portal a Fair Store record was mirrored from."""
+        if not origin_id:
+            return None
+        try:
+            from data_concierge.gateway import ckan_sites
+
+            site = ckan_sites.get_site(origin_id)
+        except Exception:  # pragma: no cover - registry failures are non-fatal
+            return None
+        if not site:
+            return None
+        return {
+            "id": origin_id,
+            "name": site.get("name") or origin_id,
+            "portal_type": _normalize_portal_type(site.get("portal_type")),
+        }
+
+    @staticmethod
+    def _origin_route(resource: dict[str, Any], origin: dict[str, Any] | None) -> str:
+        """How to load a mirrored resource's rows from the portal that has them.
+
+        A mirrored resource is a link: its rows are in the origin's DataStore
+        (CKAN, same resource UUID) or its downloadable file (DCAT), never in the
+        Fair Store's. The qsv tables the Fair Store generated itself carry no
+        ``mirror_source_portal`` and load here as usual.
+        """
+        if not origin or resource.get("datastore_active"):
+            return ""
+        if str(resource.get("mirror_source_portal") or origin["id"]) != origin["id"]:
+            return ""
+        if origin["portal_type"] == _PORTAL_TYPE_DCAT:
+            url = str(resource.get("url") or "")
+            # Only a CSV/TSV file has rows to load: the mirror makes one resource
+            # per distribution, and a JSON, XML, KML or PDF one parsed as CSV
+            # "loads" garbage (DCATDistribution.is_tabular's rule).
+            if not url.lower().startswith(("http://", "https://")) or not _is_tabular(resource):
+                return ""
+            return (
+                f"load_resource_data with portal_id=`{origin['id']}` and "
+                f"resource_id=`{url}`"
+            )
+        if not resource.get("mirror_source_datastore_active"):
+            return ""
+        source_id = str(resource.get("mirror_source_id") or resource.get("id") or "")
+        return (
+            f"load_resource_data with portal_id=`{origin['id']}` and "
+            f"resource_id=`{source_id}` (the origin's DataStore)"
+        )
 
     async def _tool_load(self, client: httpx.AsyncClient, params: dict) -> str:
         resource_id = params["resource_id"]
-        limit = min(params.get("limit", 100), 500)
+        limit = _int_param(params, "limit", 100, cap=500, floor=0)
 
         body: dict[str, Any] = {"resource_id": resource_id, "limit": limit}
         if params.get("offset"):
-            body["offset"] = params["offset"]
+            try:
+                body["offset"] = max(0, int(params["offset"]))
+            except (TypeError, ValueError):
+                pass
         if params.get("filters"):
             body["filters"] = params["filters"]
         if params.get("q"):
@@ -1169,6 +1410,10 @@ class LLMAnalysisAgent(BaseAgent):
             body["fields"] = params["fields"]
 
         resp = await client.post("/api/3/action/datastore_search", json=body)
+        if resp.status_code == 404:
+            redirect = await self._mirrored_rows_hint(client, resource_id)
+            if redirect:
+                return redirect
         resp.raise_for_status()
         data = resp.json()
 
@@ -1192,6 +1437,74 @@ class LLMAnalysisAgent(BaseAgent):
             lines.append(f"\nSample ({min(15, len(records))} rows):\n")
             lines.append(df.to_string(index=False, max_colwidth=40))
         return "\n".join(lines)
+
+    async def _route_to_origin(self, tool_name: str, tool_input: Any, portal_url: str) -> str:
+        """Send a Fair Store row load to the portal the resource was mirrored from.
+
+        The Fair Store holds metadata; a mirrored resource's rows are at its
+        origin (same UUID in a CKAN origin's DataStore, or the file a DCAT
+        origin publishes). Rewriting ``portal_id``/``resource_id`` here, before
+        the call, means the notebook records the portal that answered. Returns
+        a note for the model, or ``""`` when the load stays where it is.
+        """
+        if tool_name != "load_resource_data" or not isinstance(tool_input, dict):
+            return ""
+        from data_concierge.gateway.fairstore import PORTAL_ID as FAIRSTORE_ID
+
+        target_url = self._tool_portal_url(tool_input, portal_url)
+        if (tool_input.get("portal_id") or _site_id_for_url(target_url)) != FAIRSTORE_ID:
+            return ""
+        resource_id = str(tool_input.get("resource_id") or "")
+        if not resource_id or resource_id.lower().startswith(("http://", "https://")):
+            return ""
+        try:
+            client = await self._get_http_client(target_url)
+            resp = await client.get(
+                "/api/3/action/resource_show", params={"id": resource_id}, timeout=10.0
+            )
+        except httpx.HTTPError:
+            return ""
+        resource = _result_of(resp)
+        if not isinstance(resource, dict):
+            return ""
+        origin = self._mirror_origin(str(resource.get("mirror_source_portal") or ""))
+        if not self._origin_route(resource, origin) or origin is None:
+            return ""
+        if origin["portal_type"] == _PORTAL_TYPE_DCAT:
+            tool_input["resource_id"] = str(resource["url"])
+        else:
+            tool_input["resource_id"] = str(resource.get("mirror_source_id") or resource_id)
+        tool_input["portal_id"] = origin["id"]
+        self.logger.info(
+            "Fair Store load routed to origin", resource_id=resource_id, origin=origin["id"]
+        )
+        return (
+            f"(The Fair Store mirrors this resource; its rows were loaded from "
+            f"{origin['name']}, portal_id `{origin['id']}`, resource "
+            f"`{tool_input['resource_id']}`.)"
+        )
+
+    async def _mirrored_rows_hint(self, client: httpx.AsyncClient, resource_id: str) -> str:
+        """Point a DataStore miss on a mirrored resource at the portal with the rows."""
+        try:
+            # Short: this probe runs after every DataStore 404 on any CKAN portal.
+            resp = await client.get(
+                "/api/3/action/resource_show", params={"id": resource_id}, timeout=5.0
+            )
+        except httpx.HTTPError:
+            return ""
+        resource = _result_of(resp)
+        if not isinstance(resource, dict):
+            return ""
+        origin = self._mirror_origin(str(resource.get("mirror_source_portal") or ""))
+        route = self._origin_route(resource, origin)
+        if not route or not origin:
+            return ""
+        return (
+            f"{self.TOOL_REDIRECT_PREFIX} resource `{resource_id}` is a mirror of "
+            f"{origin['name']}'s resource; its rows are not stored on this portal. "
+            f"Call {route}."
+        )
 
     def _sql_unavailable_status(self, portal_url: str) -> int | None:
         """Status that disabled SQL for this portal, or ``None`` if usable."""
@@ -1223,6 +1536,10 @@ class LLMAnalysisAgent(BaseAgent):
     # fetched nothing, and counting it as a failure would penalise the agent
     # for correctly routing around a portal-side outage.
     TOOL_UNAVAILABLE_PREFIX = "Tool unavailable:"
+    # A call that reached the right tool on the wrong portal: the rows exist,
+    # elsewhere. Excluded from the success rate like the above, but the tool is
+    # NOT withdrawn — the model needs it to follow the redirect.
+    TOOL_REDIRECT_PREFIX = "Rows elsewhere:"
 
     @staticmethod
     def _sql_unavailable_message(status: int, detail: str = "") -> str:
@@ -1247,6 +1564,19 @@ class LLMAnalysisAgent(BaseAgent):
     async def _tool_sql(self, client: httpx.AsyncClient, params: dict) -> str:
         portal_url = str(client.base_url).rstrip("/")
 
+        from data_concierge.gateway.fairstore import PORTAL_ID as FAIRSTORE_ID
+
+        if _site_id_for_url(portal_url) == FAIRSTORE_ID:
+            # The Fair Store holds catalog metadata, no tables. Not a dead
+            # endpoint: tripping the breaker would withdraw SQL for the whole run
+            # (and 30 minutes of Fair Store chats) when the origin may serve it.
+            return (
+                f"{self.TOOL_REDIRECT_PREFIX} the Fair Store holds catalog metadata "
+                "only, so run_sql_query has no tables here. Pass the portal_id the "
+                "dataset was mirrored from (get_dataset_info shows it as 'Mirrored "
+                "from'), or use load_resource_data, which loads from that portal."
+            )
+
         # Already known dead for this portal: answer without a round trip.
         known = self._sql_unavailable_status(portal_url)
         if known is not None:
@@ -1270,7 +1600,7 @@ class LLMAnalysisAgent(BaseAgent):
                 "execution timeout. Narrow the query (add filters, "
                 "aggregate, or reduce the result set)."
             )
-        if resp.status_code in _SQL_ENDPOINT_DEAD_STATUSES:
+        if resp.status_code in _SQL_ENDPOINT_DEAD_STATUSES or _sql_action_missing(resp):
             # Endpoint-level failure: remember it so the rest of this query —
             # and the next one against the same portal — skips SQL entirely.
             self._disable_sql(portal_url, resp.status_code)
@@ -1363,10 +1693,7 @@ class LLMAnalysisAgent(BaseAgent):
             # NOT CKAN's package_search, which does not exist here and would
             # 404 on every run.
             query = tool_input.get("query", "")
-            try:
-                rows = int(tool_input.get("n_results", 10))
-            except (TypeError, ValueError):
-                rows = 10
+            rows = _int_param(tool_input, "n_results", 10, cap=20)
             return (
                 "# Resource discovery. The concierge used a semantic (vector) search\n"
                 "# over pre-indexed resource metadata here; the public equivalent for a\n"
@@ -1378,7 +1705,7 @@ class LLMAnalysisAgent(BaseAgent):
 
         if tool_name == "search_datasets":
             query = tool_input.get("query", "")
-            rows = min(int(tool_input.get("rows", 10) or 10), 20)
+            rows = _int_param(tool_input, "rows", 10, cap=20)
             return "# Search the DCAT catalog (fetched once, searched locally)\n" + (
                 LLMAnalysisAgent._dcat_catalog_search_code(catalog_url, query, rows, helper)
             )
@@ -1410,7 +1737,7 @@ class LLMAnalysisAgent(BaseAgent):
 
         if tool_name == "load_resource_data":
             rid = str(tool_input.get("resource_id", ""))
-            limit = min(int(tool_input.get("limit", 100) or 100), 1000)
+            limit = _int_param(tool_input, "limit", 100, cap=1000)
 
             if rid.lower().startswith(("http://", "https://")):
                 preamble = (
@@ -1465,10 +1792,7 @@ class LLMAnalysisAgent(BaseAgent):
 
         if tool_name == "semantic_search_resources":
             q = tool_input.get("query", "")
-            try:
-                n = int(tool_input.get("n_results", 10))
-            except (TypeError, ValueError):
-                n = 10
+            n = _int_param(tool_input, "n_results", 10, cap=20)
             # The live tool searches a private Pinecone index, which the
             # published notebook cannot reach — importing it made every
             # notebook fail both in Colab and in the verifier's kernel. The
@@ -1496,10 +1820,7 @@ class LLMAnalysisAgent(BaseAgent):
             # the user later runs, so they cannot be interpolated raw: an org
             # like `x"}\nimport os\nos.system(...)` would inject code. repr the
             # Solr fq value and coerce rows to an int.
-            try:
-                rows = int(tool_input.get("rows", 10))
-            except (TypeError, ValueError):
-                rows = 10
+            rows = _int_param(tool_input, "rows", 10, cap=20)
             # repr the whole fq value so any quotes/newlines in org are escaped
             # into a proper Python string literal in the generated cell.
             fq = f', "fq": {f"organization:{org}"!r}' if org else ""
@@ -1534,7 +1855,8 @@ class LLMAnalysisAgent(BaseAgent):
 
         if tool_name == "load_resource_data":
             rid = tool_input["resource_id"]
-            limit = tool_input.get("limit", 100)
+            # What _tool_load sent, and never raw model text inside the code.
+            limit = _int_param(tool_input, "limit", 100, cap=500, floor=0)
             parts = [f'"resource_id": {rid!r}', f'"limit": {limit}']
             if tool_input.get("filters"):
                 parts.append(f'"filters": {json.dumps(tool_input["filters"])}')
@@ -1839,6 +2161,12 @@ class LLMAnalysisAgent(BaseAgent):
             resource_record_counts: list[int] = []
             all_tool_result_texts: list[str] = []
             _prev_sql_errors: set[str] = set()  # track SQL tool_use IDs that errored
+            # Fair Store chats reach origin portals through portal_id, and the
+            # model often drops it on the next call about the same dataset.
+            portal_of_id: dict[str, str] = {}
+            from data_concierge.gateway.fairstore import PORTAL_ID as _FAIRSTORE_ID
+
+            sticky_portals = _FAIRSTORE_ID in (data_source, _site_id_for_url(portal_url))
 
             for iteration in range(max_iterations):
                 iter_start = time.monotonic()
@@ -1930,14 +2258,17 @@ class LLMAnalysisAgent(BaseAgent):
                         tool_start = time.monotonic()
 
                         # Route to MCP or CKAN tool handler
+                        called_portal: str | None = None
                         if tool_name.startswith("mcp__"):
                             result_text = await self._execute_mcp_tool(tool_name, tool_input)
                             code = self._code_for_mcp_tool(tool_name, tool_input, result_text)
                         else:
-                            result_text = await self._execute_tool(
-                                tool_name, tool_input, portal_url
+                            result_text, code, called_portal = await self._run_portal_tool(
+                                tool_name,
+                                tool_input,
+                                portal_url,
+                                portal_of_id=portal_of_id if sticky_portals else None,
                             )
-                            code = self._code_for_tool(tool_name, tool_input, portal_url)
 
                         tool_elapsed_ms = round((time.monotonic() - tool_start) * 1000)
 
@@ -1946,13 +2277,14 @@ class LLMAnalysisAgent(BaseAgent):
                         # success nor a failure — it is excluded from the
                         # success-rate denominator so the rate keeps measuring
                         # only calls that actually attempted retrieval.
-                        is_unavailable = result_text.startswith(
-                            self.TOOL_UNAVAILABLE_PREFIX
-                        )
-                        is_error = not is_unavailable and result_text.startswith(
-                            ("Error:", "HTTP ", "SQL error")
-                        )
-                        if is_unavailable:
+                        outcome = classify_tool_result(result_text)
+                        is_unavailable = outcome == "unavailable"
+                        is_redirect = outcome == "redirected"
+                        is_error = outcome == "error"
+                        retrieved = outcome == "retrieved"
+                        if is_redirect:
+                            pass  # fetched nothing, but the tool stays available
+                        elif is_unavailable:
                             # Withdraw the tool for the REST of this run, not
                             # just the next one. Telling the model in prose not
                             # to retry did not work — a measured trial had it
@@ -1980,6 +2312,8 @@ class LLMAnalysisAgent(BaseAgent):
                             successful_tool_calls += 1
 
                         all_tool_result_texts.append(result_text[:10000])
+                        if sticky_portals and called_portal and retrieved:
+                            _remember_portal(tool_input, called_portal, portal_of_id)
 
                         # Semantic search score
                         if tool_name == "semantic_search_resources" and not is_error:
@@ -1992,7 +2326,7 @@ class LLMAnalysisAgent(BaseAgent):
                                     max_semantic_score = score_val
 
                         # Row/record counts from load_resource_data
-                        if tool_name == "load_resource_data" and not is_error:
+                        if tool_name == "load_resource_data" and retrieved:
                             import re as _re
 
                             total_match = _re.search(r"Total records:\s*([\d,]+)", result_text)
@@ -2001,7 +2335,10 @@ class LLMAnalysisAgent(BaseAgent):
                                 try:
                                     count = int(total_match.group(1).replace(",", ""))
                                     resource_record_counts.append(count)
-                                    total_rows_loaded += min(count, tool_input.get("limit", 100))
+                                    total_rows_loaded += min(
+                                        count,
+                                        _int_param(tool_input, "limit", 100, cap=500, floor=0),
+                                    )
                                 except ValueError:
                                     pass
                             else:
@@ -2030,7 +2367,7 @@ class LLMAnalysisAgent(BaseAgent):
                                 resource_ids_seen.add(rid)
 
                         # SQL queries also touch resources
-                        if tool_name == "run_sql_query" and not is_error:
+                        if tool_name == "run_sql_query" and retrieved:
                             import re as _re
 
                             uuids = _re.findall(
@@ -2052,12 +2389,16 @@ class LLMAnalysisAgent(BaseAgent):
                                 ):
                                     resource_metadata_modified = mod_str
 
+                        # The portal that served the call: a portal_id override or a
+                        # Fair Store load routed to its origin, else the primary.
+                        served_by = called_portal or data_source
                         tool_calls_trace.append(
                             {
                                 "agent": self.name,
                                 "action": tool_name,
                                 "tool_name": tool_name,
                                 "arguments": tool_input,
+                                "portal_id": served_by,
                                 "result_preview": result_text[:800],
                                 "code": code,
                             }
@@ -2081,9 +2422,11 @@ class LLMAnalysisAgent(BaseAgent):
                                 "iteration": iteration + 1,
                                 "tool": tool_name,
                                 "tool_use_id": tool_id,
-                                "source": _source_for_tool(tool_name, data_source),
+                                "source": _source_for_tool(tool_name, served_by),
                                 "operation_type": _operation_type_for_tool(tool_name),
-                                "status": "error" if is_error else "success",
+                                "status": "success" if retrieved else "error",
+                                # Why nothing was retrieved, when nothing was.
+                                "outcome": outcome,
                                 "input": tool_input,
                                 "result": result_text[:10000],
                                 "result_chars": len(result_text),

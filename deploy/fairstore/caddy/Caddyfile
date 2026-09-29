@@ -1,0 +1,48 @@
+# HTTPS for the Fair Store; Caddy obtains and renews the certificate itself.
+#
+# Mounted as a directory (./caddy:/etc/caddy), not as a single file: a
+# redeploy's tar replaces the file with a new inode, and a single-file bind
+# mount keeps serving the old one. remote-up.sh runs `caddy reload` afterwards.
+{
+	servers {
+		# Only TCP 443 is published and allowed through the firewall, so
+		# don't advertise HTTP/3 (UDP) to clients that would try it first.
+		protocols h1 h2
+	}
+}
+
+{$FAIRSTORE_HOST} {
+	encode zstd gzip
+
+	# Access log with the client's address; CKAN only ever sees Caddy's.
+	log {
+		output stdout
+		format json
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		# Don't advertise the server software (Caddy adds both).
+		-Server
+		-Via
+	}
+
+	# CKAN's "Embed" button hands out an iframe of a resource view page
+	# (/dataset/<id>/resource/<id>/view/<id>), so only those stay frameable by
+	# other sites.
+	@not_view not path */view/*
+	header @not_view {
+		X-Frame-Options SAMEORIGIN
+		defer
+	}
+
+	reverse_proxy fairstore:5000 {
+		# uwsgi's http router closes idle keep-alive connections; a POST sent on
+		# a pooled one fails with a 502, and Go never retries a non-idempotent request.
+		transport http {
+			keepalive off
+		}
+	}
+}

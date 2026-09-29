@@ -158,11 +158,17 @@ logs/
 *.log
 .secrets/
 
+# API token files (deploy/fairstore/deploy.sh writes the mirror's outside the
+# repository; these catch one saved here by mistake)
+fairstore-token*
+*token.txt
+
 # Runtime-seeded local storage (contains user data / secrets — never commit)
 /users.json
 /roles.json
 /notebook_verification/
 /github_settings.json
+/fairstore_settings.json
 /landing_settings.json
 /system_prompt_settings.json
 /runtime_settings.json

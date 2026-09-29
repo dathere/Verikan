@@ -144,6 +144,7 @@ async function openResource(resourceId, title) {
                 </div>
                 ${d.description ? `<p class="lib-answer mt-2 mb-0">${escapeHtml(d.description)}</p>` : ''}
             </div>
+            ${fairstoreDatasetLink(d.dataset_id)}
         </div>
         <div class="card p-0 dict-detail-wrap">
             <table class="col-table">
@@ -153,6 +154,19 @@ async function openResource(resourceId, title) {
                 <tbody>${rows || '<tr><td colspan="4" class="text-muted p-3">No column detail available.</td></tr>'}</tbody>
             </table>
         </div>`;
+}
+
+// The Fair Store mirrors these datasets under their source names, with the
+// qsv dictionary, stats and frequency tables attached as resources.
+function fairstoreDatasetLink(datasetId) {
+    const base = document.body.dataset.fairstoreUrl;
+    if (!base || !datasetId) return '';
+    const href = `${base}/dataset/${encodeURIComponent(datasetId)}`;
+    return `<div class="pane-actions">
+        <a class="btn btn-outline-secondary btn-sm" href="${escapeAttr(href)}" target="_blank" rel="noopener">
+            <i class="bi bi-archive me-1" aria-hidden="true"></i>View in the Fair Store
+        </a>
+    </div>`;
 }
 
 function backToList() {

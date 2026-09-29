@@ -155,6 +155,13 @@ class Settings(BaseSettings):
     # Provide via env / .env only — never commit a real key (issue #91).
     ckan_api_key: SecretStr = Field(default=SecretStr(""))
 
+    # Fair Store — the CKAN that mirrors every registered portal
+    # (scripts/populate_fairstore.py). Seeds for the admin panel's Fair Store
+    # settings; an admin's saved values (fairstore_settings.json) take precedence.
+    # Deliberately separate from CKAN_URL/CKAN_API_KEY, which name data.dathere.com.
+    fairstore_url: str = ""
+    fairstore_api_key: SecretStr = Field(default=SecretStr(""))
+
     # WPRDC (Western PA Regional Data Center) - City of Pittsburgh open data
     wprdc_ckan_url: str = "https://data.wprdc.org"
     wprdc_organization: str = "city-of-pittsburgh"

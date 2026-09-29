@@ -52,6 +52,12 @@ def _compile_safe_code_cell(code: str, label: str = "generated code") -> nbforma
         )
 
 
+# Tool results that fetched nothing, so their code would fail on replay: an
+# error, a capability the portal lacks ("Tool unavailable:", e.g. DataStore SQL
+# disabled) or rows that live on another portal ("Rows elsewhere:").
+_NOTHING_FETCHED = ("Error", "HTTP ", "SQL error", "Tool unavailable:", "Rows elsewhere:")
+
+
 class NotebookGeneratorAgent(BaseAgent):
     """Agent responsible for generating reproducible Google Colab notebooks.
 
@@ -494,7 +500,7 @@ print("   - search_ckan_packages(query, rows)")
 
             # A failed exploratory call stays for provenance but must not be
             # an executable step (same rule as the CKAN trace cells).
-            failed = preview.startswith(("Error", "HTTP ", "SQL error"))
+            failed = preview.startswith(_NOTHING_FETCHED)
             if failed:
                 md = md.replace(
                     f"## Step {i}: {label}\n\n",
@@ -584,8 +590,9 @@ print("   - search_ckan_packages(query, rows)")
             # column, bad SQL) is kept for provenance but must not be an
             # executable step: reproduced verbatim it fails again, so the
             # notebook never runs top to bottom and verification (#131)
-            # scores every answer as broken.
-            failed = preview.startswith(("Error", "HTTP ", "SQL error"))
+            # scores every answer as broken. So is a call that fetched nothing
+            # (see _NOTHING_FETCHED).
+            failed = preview.startswith(_NOTHING_FETCHED)
 
             # Markdown description
             label = self._format_action(action)

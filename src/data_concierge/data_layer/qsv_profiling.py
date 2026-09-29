@@ -33,6 +33,7 @@ import json
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -186,7 +187,9 @@ def _extract_qsv_tags(qsv_data: dict) -> list[str]:
         if isinstance(val, dict):
             resp = val.get("response", val)
             if isinstance(resp, dict):
-                raw = resp.get("tags", [])
+                # describegpt capitalises the key in some responses
+                # ({"Attribution": ..., "Tags": [...]}).
+                raw = next((v for k, v in resp.items() if str(k).lower() == "tags"), [])
             else:
                 raw = resp
             if isinstance(raw, str):
@@ -306,24 +309,111 @@ def build_index(
     }
 
 
+def csv_header(path: Path) -> list[str]:
+    """A CSV's column names, as the Fair Store mirror reads them."""
+    csv.field_size_limit(max(csv.field_size_limit(), 64 * 1024 * 1024))
+    with path.open(newline="", encoding="utf-8-sig", errors="replace") as handle:
+        return [name for name in next(csv.reader(handle), []) if name]
+
+
+def scrubbed_json_bytes(path: Path) -> bytes:
+    """A JSON file's bytes with provider keys redacted, as the mirror publishes it.
+
+    ``populate_fairstore`` scrubs the raw text of ``qsv_dict.json`` before
+    publishing it and hashes the result, so storing exactly that text keeps a
+    mirror run from storage and one from local files identical (a per-value
+    scrub keeps the word after the key, which the raw scrub removes, and every
+    describegpt resource would flip between the two). Should raw scrubbing
+    ever break the JSON — a key right before a closing quote — each string
+    value is scrubbed instead.
+    """
+    from data_concierge.data_layer.onboard_index import _scrub_secrets
+
+    text = path.read_text(encoding="utf-8")
+    scrubbed = _scrub_secrets(text)
+    try:
+        json.loads(scrubbed)
+    except ValueError:
+        scrubbed = json.dumps(_scrub_values(json.loads(text)), indent=2)
+    return scrubbed.encode("utf-8")
+
+
+def _scrub_values(value: Any) -> Any:
+    from data_concierge.data_layer.onboard_index import _scrub_secrets
+
+    if isinstance(value, str):
+        return _scrub_secrets(value)
+    if isinstance(value, list):
+        return [_scrub_values(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _scrub_values(item) for key, item in value.items()}
+    return value
+
+
+# The qsv outputs populate_fairstore reads from a dataset directory.
+MIRRORED_QSV_OUTPUTS = ("qsv_dict.json", "qsv_stats.csv", "qsv_frequency.csv")
+
+
+def recorded_headers(base_dir: Path, prefix: str) -> dict[str, list[str]]:
+    """Each downloaded CSV's header, keyed as its storage key would be."""
+    headers: dict[str, list[str]] = {}
+    for csv_file in sorted(base_dir.rglob("*.csv")):
+        if csv_file.name.startswith("qsv_"):
+            continue
+        try:
+            header = csv_header(csv_file)
+        except (OSError, csv.Error):
+            continue  # an unreadable download must not stop the sync
+        # Even an empty header: locally the mirror reads [] from such a file.
+        headers[f"{prefix}/{csv_file.relative_to(base_dir.parent)}"] = header
+    return headers
+
+
+def sync_manifest(base_dir: Path, prefix: str) -> dict[str, Any]:
+    """What a mirror run from storage needs to know about the local directory.
+
+    ``headers``: each downloaded CSV's header. ``dirs``: every dataset directory
+    and the qsv outputs it holds now — so a directory that is absent stays
+    absent, and an output deleted since an earlier sync is not staged.
+    """
+    dirs = {
+        f"{prefix}/{directory.relative_to(base_dir.parent)}": sorted(
+            name for name in MIRRORED_QSV_OUTPUTS if (directory / name).is_file()
+        )
+        for directory in sorted(p for p in base_dir.iterdir() if p.is_dir())
+    }
+    return {"version": 1, "headers": recorded_headers(base_dir, prefix), "dirs": dirs}
+
+
 def sync_to_storage(base_dir: Path, site_id: str, prefix: str = "ckan_onboard") -> int:
     """Sync JSON and qsv CSV files from local disk to the unified storage backend.
 
     ``prefix`` is the storage key namespace.  It defaults to ``ckan_onboard``
     because ``onboard_index`` reads from there and existing deployments already
     have data under that prefix.
+
+    The downloaded CSVs themselves are not synced; ``sync_manifest.json``
+    records their headers and which dataset directories and qsv outputs exist
+    (:func:`sync_manifest`). ``populate_fairstore`` checks each qsv output
+    against the header of the file it describes, and runs from the storage
+    backend when the admin panel starts a mirror on Cloud Run.
+
+    JSON is scrubbed of provider keys on the way: qsv describegpt records its
+    own command line, ``--api-key`` included, in ``qsv_dict.json``,
+    ``meta.json`` and ``index.json``.
     """
     synced = 0
+    manifest = sync_manifest(base_dir, prefix)
     for json_file in base_dir.rglob("*.json"):
         rel = json_file.relative_to(base_dir.parent)
         key = f"{prefix}/{rel}"
-        with open(json_file) as f:
-            data = json.load(f)
-        storage.write_json(key, data)
+        storage.write_bytes(key, scrubbed_json_bytes(json_file))
         synced += 1
     for csv_file in base_dir.rglob("qsv_*.csv"):
         rel = csv_file.relative_to(base_dir.parent)
         key = f"{prefix}/{rel}"
         storage.write_bytes(key, csv_file.read_bytes())
         synced += 1
-    return synced
+    # Last: a manifest must never list objects an interrupted sync did not write.
+    storage.write_json(f"{prefix}/{site_id}/sync_manifest.json", manifest)
+    return synced + 1

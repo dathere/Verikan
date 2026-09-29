@@ -1,0 +1,117 @@
+# Production Fair Store: CKAN 2.11 (uwsgi) + ckanext-hierarchy behind Caddy,
+# which provisions HTTPS automatically. deploy.sh ships this directory, with
+# docker/fairstore as ./ckan, to one Compute Engine VM next to Verikan. Every
+# secret comes from .env, generated on the VM on first deploy (remote-up.sh).
+#
+# Same services and names as the fairstore profile in the root
+# docker-compose.yml, minus the dev server, plus Caddy and hardening.
+name: fairstore
+
+# Container logs (Caddy's access log included) are rotated, not kept forever.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  fairstore:
+    build:
+      context: ./ckan
+      args:
+        CKAN_BASE_IMAGE: ckan/ckan-base:2.11.6
+    image: fairstore-ckan:2.11.6
+    depends_on:
+      fairstore-db:
+        condition: service_healthy
+      fairstore-solr:
+        condition: service_started
+      fairstore-redis:
+        condition: service_started
+    environment:
+      - CKAN_SITE_URL=https://${FAIRSTORE_HOST:?}
+      - CKAN_SQLALCHEMY_URL=postgresql://ckan:${FAIRSTORE_DB_PASSWORD:?}@fairstore-db/ckan
+      - CKAN_DATASTORE_WRITE_URL=postgresql://ckan_datastore_write:${FAIRSTORE_DATASTORE_PASSWORD:?}@fairstore-db/datastore
+      - CKAN_DATASTORE_READ_URL=postgresql://ckan_datastore_read:${FAIRSTORE_DATASTORE_PASSWORD:?}@fairstore-db/datastore
+      - CKAN_SOLR_URL=http://fairstore-solr:8983/solr/ckan
+      - CKAN_REDIS_URL=redis://fairstore-redis:6379/1
+      - CKAN_SECRET_KEY=${FAIRSTORE_SECRET_KEY:?}
+      # Created by the image's prerun on first start; skipped once it exists.
+      - CKAN_SYSADMIN_NAME=fairadmin
+      - CKAN_SYSADMIN_PASSWORD=${FAIRSTORE_ADMIN_PASSWORD:?}
+      - CKAN_SYSADMIN_EMAIL=fairadmin@${FAIRSTORE_HOST:?}
+      - CKAN__PLUGINS=envvars datastore datatables_view text_view image_view hierarchy_display hierarchy_form
+      - CKAN__VIEWS__DEFAULT_VIEWS=datatables_view text_view image_view
+      # The 2.11.6 image's ckan.ini sets ckan.uploads_enabled to an empty
+      # value, which turns file uploads off in the web forms.
+      - CKAN__UPLOADS_ENABLED=true
+      # CKAN exempts extension endpoints (the DataStore dictionary editor, the
+      # DataTables AJAX feed) from CSRF checks by default, and SameSite=Lax
+      # does not cover them here: sslip.io is not a public suffix, so every
+      # other *.sslip.io site counts as same-site.
+      - CKAN__CSRF_PROTECTION__IGNORE_EXTENSIONS=false
+      - CKAN__SITE_TITLE=Verikan Fair Store
+      # Records are written by the mirror and edited by admins; nobody signs
+      # up through the web, and the user list is not public.
+      - CKAN__AUTH__CREATE_USER_VIA_WEB=false
+      - CKAN__AUTH__PUBLIC_USER_DETAILS=false
+    volumes:
+      - fairstore_data:/var/lib/ckan
+    restart: unless-stopped
+    logging: *logging
+
+  fairstore-db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${FAIRSTORE_POSTGRES_PASSWORD:?}
+      - POSTGRES_DB=postgres
+      - CKAN_DB_PASSWORD=${FAIRSTORE_DB_PASSWORD:?}
+      - DATASTORE_DB_PASSWORD=${FAIRSTORE_DATASTORE_PASSWORD:?}
+    volumes:
+      - fairstore_db:/var/lib/postgresql/data
+      - ./ckan/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *logging
+
+  fairstore-solr:
+    image: ckan/ckan-solr:2.11-solr9
+    volumes:
+      - fairstore_solr:/var/solr
+    restart: unless-stopped
+    logging: *logging
+
+  fairstore-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - fairstore
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - FAIRSTORE_HOST=${FAIRSTORE_HOST:?}
+    volumes:
+      # The directory, not the file: a redeploy replaces the Caddyfile's inode,
+      # which a single-file bind mount would never see (caddy/Caddyfile).
+      - ./caddy:/etc/caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  fairstore_data:
+  fairstore_db:
+  fairstore_solr:
+  caddy_data:
+  caddy_config:

@@ -20,6 +20,7 @@ from dotenv import find_dotenv, load_dotenv
 
 load_dotenv(find_dotenv(usecwd=True))
 
+import asyncio  # noqa: E402
 from collections.abc import AsyncGenerator  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 
@@ -89,11 +90,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Connectors create ``httpx.AsyncClient`` pools lazily and never closed
     them, leaving pools open on Cloud Run shutdown (issue #96). Close them
     all when the app stops.
+
+    On start, the Fair Store's chat-source entry is re-synced in the background
+    (never delaying the port bind): its URL can come from ``FAIRSTORE_URL``,
+    which a redeploy may change without a settings save.
     """
+    sync = asyncio.create_task(asyncio.to_thread(_sync_fairstore_chat_source))
     yield
+    sync.cancel()
     from data_concierge.data_layer.connectors import close_all_clients
 
     await close_all_clients()
+
+
+def _sync_fairstore_chat_source() -> None:
+    try:
+        from data_concierge.gateway.fairstore import sync_chat_source
+
+        sync_chat_source()
+    except Exception as exc:  # noqa: BLE001 - never fail startup on it
+        from data_concierge.core.logging import get_logger
+
+        get_logger(__name__).warning("Fair Store chat-source sync failed", error=str(exc))
 
 
 # Create FastAPI app
@@ -159,8 +177,18 @@ async def home(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"landing": load_landing_settings()},
+        context={"landing": load_landing_settings(), "fairstore": _fairstore_link()},
     )
+
+
+def _fairstore_link() -> dict:
+    """The linked Fair Store's public address, for navigation links."""
+    from data_concierge.gateway.fairstore import public_info
+
+    try:
+        return public_info()
+    except Exception:  # noqa: BLE001 - a nav link must never break the page
+        return {"configured": False}
 
 
 def _get_admin_user(request: Request) -> dict | None:
@@ -193,7 +221,9 @@ async def library(request: Request):
 @app.get("/dictionary", response_class=HTMLResponse)
 async def dictionary(request: Request):
     """Serve the public Fair Store data dictionary browser (#136)."""
-    return templates.TemplateResponse(request=request, name="dictionary.html")
+    return templates.TemplateResponse(
+        request=request, name="dictionary.html", context={"fairstore": _fairstore_link()}
+    )
 
 
 @app.get("/admin", response_class=HTMLResponse)
