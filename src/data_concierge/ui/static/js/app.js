@@ -534,8 +534,11 @@ function updateAuthUI() {
         logoutBtn.classList.add('d-none');
         authStatus.classList.add('d-none');
     }
-    // Admin shortcut in the navbar — only for signed-in admins.
-    if (adminBtn) adminBtn.classList.toggle('d-none', !(isAuthenticated && _isAdmin));
+    // Admin shortcuts — the top bar button and the sidebar link — only for
+    // signed-in admins.
+    const showAdmin = isAuthenticated && _isAdmin;
+    if (adminBtn) adminBtn.classList.toggle('d-none', !showAdmin);
+    document.getElementById('adminTopBtn')?.classList.toggle('d-none', !showAdmin);
 }
 
 function showLoginModal(pendingQuery = null) {
