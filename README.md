@@ -578,7 +578,7 @@ ignores your `.env` and a local override cannot turn it red.
 
 <div align="center">
 
-**Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)** — see [LICENSE](LICENSE)
+**Copyright © 2026 datHere** · Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) — see [LICENSE](LICENSE)
 
 Built by [datHere](https://dathere.com) · Evidence format by [Typed Standards](https://typedstandards.org)
 
