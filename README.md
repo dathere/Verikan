@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/dathere/Verikan/actions/workflows/ci.yml/badge.svg)](https://github.com/dathere/Verikan/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C)](https://langchain-ai.github.io/langgraph/)
 [![Claude](https://img.shields.io/badge/Claude-D97757?logo=anthropic&logoColor=white)](https://www.anthropic.com/)
@@ -578,7 +578,7 @@ ignores your `.env` and a local override cannot turn it red.
 
 <div align="center">
 
-**MIT licensed** — see [LICENSE](LICENSE)
+**Copyright © 2026 datHere** · Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) — see [LICENSE](LICENSE)
 
 Built by [datHere](https://dathere.com) · Evidence format by [Typed Standards](https://typedstandards.org)
 

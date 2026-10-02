@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Verikan — the verified Data Concierge: citation-backed answers about public statistical data, with a reproducible notebook for every answer"
 readme = "README.md"
 requires-python = ">=3.12"
-license = {text = "MIT"}
+license = {text = "AGPL-3.0-or-later"}
 authors = [
     {name = "datHere"}
 ]
@@ -12,7 +12,7 @@ keywords = ["ai", "open-data", "statistics", "langgraph", "fastapi", "jupyter", 
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.14",
 ]
