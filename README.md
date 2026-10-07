@@ -22,7 +22,7 @@
 ---
 
 > [!NOTE]
-> Verikan was built and used at datHere with our Western PA partners for a year before this release. What's here is that same system, now open source under MIT. Which is also why some of the tooling has a backlog, and the number of commits does not fully reflect the work done before the release.
+> Verikan was built and used at datHere with our Western PA partners for a year before this release. What's here is that same system, now open source under AGPL. That is also why some of the tooling has a backlog, and the number of commits doesn't fully reflect the work done before the release.
 
 ## Why this exists
 
@@ -358,9 +358,9 @@ examples/                    # Sample generated notebooks
 
 ---
 
-## CKAN Fair Store mirror
+## CKAN FAIR Store mirror
 
-Start the local CKAN 2.11 Fair Store with organization hierarchy support.
+Start the local CKAN 2.12 Fair Store with organization hierarchy support.
 Set `FAIRSTORE_SECRET_KEY` (any long random string, e.g. in `.env`) so API
 tokens and sessions survive the container being recreated:
 
@@ -437,9 +437,9 @@ python -m scripts.populate_fairstore \
 
 ### Managing the Fair Store from Verikan
 
-The admin panel's **Fair Store** page links Verikan to it:
+The admin panel's **FAIR Store** page links Verikan to it:
 
-- **Connection** — the Fair Store URL and a sysadmin API token (`ckan user
+- **Connection** — the FAIR Store URL and a sysadmin API token (`ckan user
   token add <sysadmin> verikan` on the Fair Store). `FAIRSTORE_URL` and
   `FAIRSTORE_API_KEY` seed these; values saved on the page take precedence.
   The token is never shown again and is only ever sent to the host it was saved
@@ -455,7 +455,7 @@ The admin panel's **Fair Store** page links Verikan to it:
 
 The chat sidebar and the data dictionary link to the Fair Store once it is set.
 
-### Deploying the Fair Store on GCP
+### Deploying the FAIR Store on GCP
 
 `deploy/fairstore/deploy.sh` runs the same stack on one Compute Engine VM next
 to Verikan (in `us-central1` by default; `PROJECT` names the GCP project): CKAN on uwsgi
@@ -508,7 +508,7 @@ storage at a temp directory, so a test run never writes into your checkout.
 
 - `GraphState` (`agents/state.py`) is a `TypedDict`, not a Pydantic model — LangGraph requires
   this. Read keys with `.get()`.
-- Any agent action that retrieves, computes, visualises or cites **must** append to
+- Any agent action that retrieves, computes, visualizes, or cites **must** append to
   `state["execution_trace"]`, or the generated notebook is silently incomplete.
 - Route order in `gateway/router.py` is load-bearing: specific paths before wildcards like
   `/{query_id}`.
@@ -516,7 +516,7 @@ storage at a temp directory, so a test run never writes into your checkout.
   suggested follow-up questions.
 - A confidence factor that can't be computed is `None` with a reason, never `0.0`.
 - The UI is token-based with light and dark themes; JavaScript in `ui/static/js/` binds to
-  element ids in the Jinja templates — change both sides together.
+  element IDs in the Jinja templates — change both sides together.
 
 </details>
 
