@@ -31,7 +31,8 @@ logger = get_logger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 # qsv describegpt records its full invocation in the AI-generated descriptions,
-# and that command carries the OpenRouter API key on --api-key. Those
+# and onboarding runs before the key moved to QSV_LLM_APIKEY (see
+# qsv_profiling.run_qsv_describegpt) put the OpenRouter API key on --api-key. Those
 # descriptions are served over the Fair Store API, rendered in the data
 # dictionary UI, and fed into the agent's prompt — so the key would leak three
 # ways. Redact provider secrets and the key flag before any description is used.

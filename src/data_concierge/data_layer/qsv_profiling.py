@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
+import os
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
@@ -65,20 +66,25 @@ async def run_qsv_describegpt(
     api_key: str,
     output_path: Path,
 ) -> dict | None:
-    """Run qsv describegpt and return parsed JSON output."""
+    """Run qsv describegpt and return parsed JSON output.
+
+    The API key goes to qsv in ``QSV_LLM_APIKEY``, not ``--api-key``: describegpt
+    copies its command line into the descriptions it generates, and argv is also
+    visible to other local users in ``ps``.
+    """
     cmd = [
         "qsv", "describegpt", str(csv_path),
         "--all",
         "--format", "json",
         "--base-url", "https://openrouter.ai/api/v1",
         "--model", "google/gemini-2.5-flash-lite",
-        "--api-key", api_key,
     ]
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env={**os.environ, "QSV_LLM_APIKEY": api_key},
     )
     stdout, stderr = await proc.communicate()
 
@@ -399,8 +405,9 @@ def sync_to_storage(base_dir: Path, site_id: str, prefix: str = "ckan_onboard") 
     backend when the admin panel starts a mirror on Cloud Run.
 
     JSON is scrubbed of provider keys on the way: qsv describegpt records its
-    own command line, ``--api-key`` included, in ``qsv_dict.json``,
-    ``meta.json`` and ``index.json``.
+    own command line in ``qsv_dict.json``, ``meta.json`` and ``index.json``,
+    and onboarding runs before the key moved to ``QSV_LLM_APIKEY`` passed it
+    on ``--api-key``.
     """
     synced = 0
     manifest = sync_manifest(base_dir, prefix)
