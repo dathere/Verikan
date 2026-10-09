@@ -14,10 +14,11 @@ import csv
 import json
 import os
 import re
-import subprocess
 import sys
 from io import StringIO
 from pathlib import Path
+
+from qsv_client import QsvNotFound, find_qsv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -32,6 +33,7 @@ from data_concierge.data_layer.qsv_profiling import (  # noqa: E402
     build_index,
     download_csv,
     merge_columns,
+    run_qsv_count,
     run_qsv_describegpt,
     run_qsv_frequency,
     run_qsv_stats,
@@ -211,17 +213,9 @@ async def process_resource(
 
         # Step 7: Count rows from CSV
         if csv_path.exists():
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "qsv", "count", str(csv_path),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, _ = await proc.communicate()
-                if proc.returncode == 0:
-                    result["row_count"] = int(stdout.decode().strip())
-            except Exception:
-                pass
+            row_count = await run_qsv_count(csv_path)
+            if row_count is not None:
+                result["row_count"] = row_count
 
         # Save meta.json
         resource_dir.mkdir(parents=True, exist_ok=True)
@@ -372,8 +366,8 @@ async def main() -> None:
 
     # Verify qsv is installed
     try:
-        subprocess.run(["qsv", "--version"], capture_output=True, check=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
+        find_qsv()
+    except QsvNotFound:
         print("Error: qsv is not installed or not in PATH.")
         print("Install from: https://github.com/dathere/qsv")
         sys.exit(1)

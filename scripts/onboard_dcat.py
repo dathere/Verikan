@@ -48,6 +48,7 @@ from data_concierge.data_layer.qsv_profiling import (  # noqa: E402
     _extract_qsv_tags,
     _now_iso,
     merge_columns,
+    run_qsv_count,
     run_qsv_describegpt,
     run_qsv_frequency,
     run_qsv_stats,
@@ -218,17 +219,9 @@ async def process_dataset(
 
         # Step 5: exact row count
         if csv_path.exists():
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "qsv", "count", str(csv_path),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, _ = await proc.communicate()
-                if proc.returncode == 0:
-                    result["row_count"] = int(stdout.decode().strip())
-            except Exception:
-                pass
+            row_count = await run_qsv_count(csv_path)
+            if row_count is not None:
+                result["row_count"] = row_count
 
         resource_dir.mkdir(parents=True, exist_ok=True)
         meta_path.write_text(json.dumps(result, indent=2))

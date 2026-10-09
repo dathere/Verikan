@@ -19,6 +19,11 @@ The qsv passes, in the order the scripts run them:
 ``count``
     Exact row count.
 
+Every pass runs through `qsv-client <https://github.com/dathere/qsv-client>`_, which
+kills a run that exceeds its timeout (see ``_DEFAULT_TIMEOUTS``; each one can be
+overridden with ``VERIKAN_QSV_<PASS>_TIMEOUT``). A failed, timed-out, or missing
+qsv makes the pass return ``None``, and the onboarding scripts carry on without it.
+
 :func:`merge_columns` folds all of those, plus the portal's own field
 metadata when it has any, into the single column list that
 ``data_layer.onboard_index`` searches and that
@@ -27,16 +32,21 @@ metadata when it has any, into the single column list that
 
 from __future__ import annotations
 
-import asyncio
 import csv
 import json
 import os
 from datetime import UTC, datetime
-from io import StringIO
 from pathlib import Path
 from typing import Any
 
 import httpx
+from qsv_client import (
+    AsyncQsv,
+    QsvError,
+    QsvNotFound,
+    QsvTimeout,
+    QsvVersionError,
+)
 
 from data_concierge.data_layer.storage import storage
 
@@ -61,6 +71,71 @@ async def download_csv(url: str, dest: Path) -> int:
     return size
 
 
+# Default per-pass timeouts in seconds. ``VERIKAN_QSV_<PASS>_TIMEOUT`` overrides one,
+# e.g. ``VERIKAN_QSV_STATS_TIMEOUT=1800`` for a portal with very large CSVs.
+_DEFAULT_TIMEOUTS: dict[str, float] = {
+    "describegpt": 900.0,  # several LLM round trips
+    "stats": 900.0,
+    "frequency": 600.0,
+    "count": 120.0,
+}
+
+# A failed run, a missing or too-old binary, or output that does not parse. QsvNotFound and
+# QsvVersionError are not QsvError subclasses, and the client raises QsvNotFound from its
+# constructor.
+_QSV_FAILURES = (QsvError, QsvNotFound, QsvVersionError, ValueError)
+
+# Binaries whose missing describegpt has already been reported, so a portal run warns once.
+_describegpt_checked: set[str] = set()
+
+
+def _timeout(command: str) -> float:
+    var = f"VERIKAN_QSV_{command.upper()}_TIMEOUT"
+    raw = os.environ.get(var)
+    if raw:
+        try:
+            return float(raw)
+        except ValueError:
+            print(f"    ignoring {var}={raw!r}: not a number")
+    return _DEFAULT_TIMEOUTS[command]
+
+
+def _qsv(api_key: str | None = None) -> AsyncQsv:
+    """The qsv client every profiling pass runs through.
+
+    The binary is ``$QSV_BIN`` if set, else the first of qsv, qsvmcp, qsvdp, qsvlite on
+    ``PATH``. Each run is killed (with its whole process group) once it passes its timeout.
+    """
+    return AsyncQsv(llm_api_key=api_key)
+
+
+def _report_failure(command: str, exc: Exception) -> None:
+    kind = getattr(exc, "kind", None)
+    message = getattr(exc, "message", None) or str(exc)
+    label = f"{type(exc).__name__}, {kind}" if kind else type(exc).__name__
+    print(f"    qsv {command} failed ({label}): {message[:500]}")
+
+
+async def _explain_missing_describegpt(qsv: AsyncQsv) -> None:
+    """After a describegpt failure, say so if the binary has no describegpt at all.
+
+    qsvlite and qsvdp lack it, and binary discovery falls back to them. Checked lazily so a
+    successful run pays nothing for the probe.
+    """
+    if qsv.binary in _describegpt_checked:
+        return
+    _describegpt_checked.add(qsv.binary)
+    try:
+        caps = await qsv.capabilities()
+    except _QSV_FAILURES:
+        return
+    if caps.commands and not caps.has_command("describegpt"):
+        print(
+            f"    {qsv.binary} ({caps.binary} {caps.version}) has no describegpt command; "
+            "install the full qsv binary or point QSV_BIN at it"
+        )
+
+
 async def run_qsv_describegpt(
     csv_path: Path,
     api_key: str,
@@ -71,58 +146,66 @@ async def run_qsv_describegpt(
     The API key goes to qsv in ``QSV_LLM_APIKEY``, not ``--api-key``: describegpt
     copies its command line into the descriptions it generates, and argv is also
     visible to other local users in ``ps``.
+
+    The output is re-serialised with ``json.dump(indent=2)`` rather than streamed to
+    ``output_path`` as qsv wrote it: ``qsv_dict.json`` is published and hashed, so its
+    bytes must not change with qsv's own formatting.
     """
-    cmd = [
-        "qsv", "describegpt", str(csv_path),
-        "--all",
-        "--format", "json",
-        "--base-url", "https://openrouter.ai/api/v1",
-        "--model", "google/gemini-2.5-flash-lite",
-    ]
-
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env={**os.environ, "QSV_LLM_APIKEY": api_key},
-    )
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        print(f"    qsv describegpt failed (exit {proc.returncode}): {stderr.decode()[:500]}")
-        return None
-
+    qsv: AsyncQsv | None = None
     try:
-        data = json.loads(stdout.decode())
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w") as f:
-            json.dump(data, f, indent=2)
-        return data
-    except json.JSONDecodeError as e:
-        print(f"    qsv output not valid JSON: {e}")
+        qsv = _qsv(api_key)
+        data = await qsv.describegpt(
+            csv_path,
+            "--all",
+            "--format", "json",
+            "--base-url", "https://openrouter.ai/api/v1",
+            "--model", "google/gemini-2.5-flash-lite",
+            timeout=_timeout("describegpt"),
+        )
+    except _QSV_FAILURES as e:
+        _report_failure("describegpt", e)
+        if qsv is not None and isinstance(e, QsvError) and not isinstance(e, QsvTimeout):
+            await _explain_missing_describegpt(qsv)
         return None
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(data, f, indent=2)
+    return data
+
+
+async def _run_qsv_csv(
+    command: str, csv_path: Path, output_path: Path, *args: str
+) -> list[dict[str, str]] | None:
+    """Stream ``qsv <command>``'s CSV output to ``output_path`` and return its rows.
+
+    qsv writes to a sibling ``.part`` file that replaces ``output_path`` only once the run
+    succeeds and parses, so a failed or killed run leaves the previous output in place
+    rather than a truncated file.
+    """
+    part = output_path.with_name(output_path.name + ".part")
+    try:
+        res = await _qsv().run(
+            command, csv_path, *args, stdout_path=part, timeout=_timeout(command)
+        )
+        rows = res.csv_rows()
+        os.replace(part, output_path)
+        return rows
+    except _QSV_FAILURES as e:
+        _report_failure(command, e)
+        return None
+    finally:
+        part.unlink(missing_ok=True)
 
 
 async def run_qsv_stats(csv_path: Path, output_path: Path) -> dict[str, dict] | None:
     """Run qsv stats and return per-column stats keyed by column name."""
-    proc = await asyncio.create_subprocess_exec(
-        "qsv", "stats", str(csv_path), "--everything",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        print(f"    qsv stats failed: {stderr.decode()[:300]}")
+    rows = await _run_qsv_csv("stats", csv_path, output_path, "--everything")
+    if rows is None:
         return None
 
-    raw = stdout.decode()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(raw)
-
-    reader = csv.DictReader(StringIO(raw))
     stats_by_col: dict[str, dict] = {}
-    for row in reader:
+    for row in rows:
         col_name = row.get("field", "")
         if col_name:
             stats_by_col[col_name] = {k: v for k, v in row.items() if k != "field"}
@@ -131,24 +214,12 @@ async def run_qsv_stats(csv_path: Path, output_path: Path) -> dict[str, dict] | 
 
 async def run_qsv_frequency(csv_path: Path, output_path: Path) -> dict[str, list[dict]] | None:
     """Run qsv frequency and return top values per column."""
-    proc = await asyncio.create_subprocess_exec(
-        "qsv", "frequency", str(csv_path), "--limit", "20",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        print(f"    qsv frequency failed: {stderr.decode()[:300]}")
+    rows = await _run_qsv_csv("frequency", csv_path, output_path, "--limit", "20")
+    if rows is None:
         return None
 
-    raw = stdout.decode()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(raw)
-
-    reader = csv.DictReader(StringIO(raw))
     freq_by_col: dict[str, list[dict]] = {}
-    for row in reader:
+    for row in rows:
         col_name = row.get("field", "")
         if col_name:
             freq_by_col.setdefault(col_name, []).append({
@@ -156,6 +227,15 @@ async def run_qsv_frequency(csv_path: Path, output_path: Path) -> dict[str, list
                 "count": int(row.get("count", 0)),
             })
     return freq_by_col
+
+
+async def run_qsv_count(csv_path: Path) -> int | None:
+    """Exact row count of ``csv_path``, or ``None`` if qsv could not count it."""
+    try:
+        return await _qsv().count(csv_path, timeout=_timeout("count"))
+    except _QSV_FAILURES as e:
+        _report_failure("count", e)
+        return None
 
 
 def _extract_qsv_fields(qsv_data: dict) -> list[dict]:
