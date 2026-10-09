@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # TARGETARCH is supplied automatically by BuildKit. The release ships one zip
 # per architecture holding several build variants; only the full "qsv" binary
 # has describegpt, so that is the one extracted (qsvlite omits it).
-ARG QSV_VERSION=22.0.1
+ARG QSV_VERSION=24.0.0
 ARG TARGETARCH=amd64
 RUN set -eux; \
     case "${TARGETARCH}" in \

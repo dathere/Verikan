@@ -58,7 +58,6 @@ import asyncio
 import json
 import os
 import re
-import shutil
 import sys
 import tempfile
 import threading
@@ -68,6 +67,8 @@ from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from qsv_client import QsvNotFound, find_qsv
 
 from data_concierge.core.logging import get_logger
 from data_concierge.data_layer.storage import storage
@@ -191,7 +192,9 @@ def runtime_warnings() -> list[str]:
             "The onboarding scripts are not present in this deployment, so jobs "
             "cannot be started. The container image must copy scripts/ to /app/scripts."
         )
-    if shutil.which("qsv") is None:
+    try:
+        find_qsv()
+    except QsvNotFound:
         warnings.append(
             "qsv is not installed on this host. Downloads will succeed but every "
             "profiling pass (stats, frequency, describegpt, count) will be skipped, "

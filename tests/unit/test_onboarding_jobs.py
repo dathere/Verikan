@@ -267,9 +267,17 @@ class TestJobLifecycle:
 
 
 class TestRuntimeWarnings:
-    def test_missing_qsv_is_reported(self, monkeypatch):
-        monkeypatch.setattr(oj.shutil, "which", lambda name: None)
-        assert any("qsv" in w for w in oj.runtime_warnings())
+    def test_missing_qsv_is_reported(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("QSV_BIN", str(tmp_path / "no-such-qsv"))
+        assert any("qsv is not installed" in w for w in oj.runtime_warnings())
+
+    def test_qsv_bin_outside_path_counts_as_installed(self, monkeypatch, tmp_path):
+        qsv = tmp_path / "opt" / "qsv"
+        qsv.parent.mkdir()
+        qsv.write_text("")
+        monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+        monkeypatch.setenv("QSV_BIN", str(qsv))
+        assert not any("qsv is not installed" in w for w in oj.runtime_warnings())
 
     def test_cloud_run_lifetime_is_reported(self, monkeypatch):
         monkeypatch.setenv("K_SERVICE", "data-concierge")

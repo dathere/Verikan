@@ -470,6 +470,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "pyyaml" },
+    { name = "qsv-client" },
     { name = "redis" },
     { name = "structlog" },
     { name = "tenacity" },
@@ -518,6 +519,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-multipart", specifier = ">=0.0.6" },
     { name = "pyyaml", specifier = ">=6.0.0" },
+    { name = "qsv-client", specifier = ">=0.1.0" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "respx", marker = "extra == 'dev'", specifier = ">=0.23.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
@@ -2182,6 +2184,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/35/c1/80dd2d20d6e57bc68e1dce1e84bf3e76c9577c1bf728199985c8b4ea0fd1/pyzmq-27.2.0-cp315-cp315t-win32.whl", hash = "sha256:ac126d48cf18aa955daabef43bf0009ff76ad4deee437d09ecf15388214b5beb", size = 591073, upload-time = "2026-08-20T19:07:31.341Z" },
     { url = "https://files.pythonhosted.org/packages/f8/b5/33b781666f3f52ae834bc9c8e38f4f0483a826c5a91cccc993292007bf10/pyzmq-27.2.0-cp315-cp315t-win_amd64.whl", hash = "sha256:edce90a1e588ec63adbf612cc0ad582de4169cd216c7ae53c15f42a2ee902f35", size = 670701, upload-time = "2026-08-20T19:07:32.895Z" },
     { url = "https://files.pythonhosted.org/packages/6e/97/bc4f0edefb992df4fdebcf9f0cc40f631cd4ed277e1ed59ef2cd99a5c8c5/pyzmq-27.2.0-cp315-cp315t-win_arm64.whl", hash = "sha256:a843094b4d3d633bc3623e47a2ff50742d6af02bc1f7606aa2e67e971e21878d", size = 581985, upload-time = "2026-08-20T19:07:34.19Z" },
+]
+
+[[package]]
+name = "qsv-client"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/9f/9b7e1dc62f6514e85f9d63ce518210cc31da5ffb499c4c122c599703785f/qsv_client-0.1.0.tar.gz", hash = "sha256:ee00c1b23b1c82d2aabe3c8f9ba1efc005af79a16417b051a5fb13c79e73cc92", size = 74153, upload-time = "2026-10-08T17:45:38.452Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/67/c5/eb90cab38ba04bb698dfe1963d6ed1eb4b5278a3888520057aedbe8132da/qsv_client-0.1.0-py3-none-any.whl", hash = "sha256:5a2a04a93ee9f689a294fd659c4f2a627cc5462d5a618ab34edfe7cdc3802030", size = 27070, upload-time = "2026-10-08T17:45:37.143Z" },
 ]
 
 [[package]]
