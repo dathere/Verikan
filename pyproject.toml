@@ -42,7 +42,7 @@ dependencies = [
     "httpx>=0.26.0",
 
     # qsv runner (timeouts, typed errors) for the onboarding profiling passes
-    "qsv-client>=0.3.0",
+    "qsv-client>=0.4.0",
 
     # Vector Search (Pinecone for CKAN semantic search)
     # Note: Use the new `pinecone` package (v5+), NOT the legacy
