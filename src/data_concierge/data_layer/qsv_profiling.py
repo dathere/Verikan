@@ -45,7 +45,6 @@ from qsv_client import (
     QsvError,
     QsvNotFound,
     QsvTimeout,
-    QsvVersionError,
 )
 
 from data_concierge.data_layer.storage import storage
@@ -80,10 +79,10 @@ _DEFAULT_TIMEOUTS: dict[str, float] = {
     "count": 120.0,
 }
 
-# A failed run, a missing or too-old binary, or output that does not parse. QsvNotFound and
-# QsvVersionError are not QsvError subclasses, and the client raises QsvNotFound from its
+# A failed run, a missing or too-old binary, or output that does not parse. A too-old qsv
+# (QsvVersionError) is a QsvError; QsvNotFound is not, and the client raises it from its
 # constructor.
-_QSV_FAILURES = (QsvError, QsvNotFound, QsvVersionError, ValueError)
+_QSV_FAILURES = (QsvError, QsvNotFound, ValueError)
 
 # Binaries whose missing describegpt has already been reported, so a portal run warns once.
 _describegpt_checked: set[str] = set()

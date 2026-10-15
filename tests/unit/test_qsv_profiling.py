@@ -23,11 +23,34 @@ KEY = "sk-or-v1-0123456789abcdef"
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="fake qsv is a POSIX script")
 
 
-def _fake_qsv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> Path:
-    """Put a Python script named ``qsv`` first on PATH, ahead of any real qsv."""
+QSV_CAPABILITIES = {
+    "binary": "qsv",
+    "version": "25.0.0",
+    "commands": ["count", "describegpt", "frequency", "stats"],
+}
+
+
+def _fake_qsv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    body: str,
+    capabilities: dict | None = QSV_CAPABILITIES,
+) -> Path:
+    """Put a Python script named ``qsv`` first on PATH, ahead of any real qsv.
+
+    It answers ``--capabilities`` with ``capabilities`` (qsv-client checks that before the
+    first run); pass ``None`` to leave it to ``body``, like a qsv older than 25.0.0.
+    """
     fake = tmp_path / "bin" / "qsv"
     fake.parent.mkdir(exist_ok=True)
-    fake.write_text(f"#!{sys.executable}\nimport json, os, sys, time\n{body}")
+    caps = (
+        ""
+        if capabilities is None
+        else f"if sys.argv[1:] == ['--capabilities']:\n"
+        f"    print({json.dumps(capabilities)!r})\n"
+        f"    sys.exit(0)\n"
+    )
+    fake.write_text(f"#!{sys.executable}\nimport json, os, sys, time\n{caps}{body}")
     fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
     monkeypatch.delenv("QSV_BIN", raising=False)
@@ -160,16 +183,8 @@ async def test_describegpt_failure_on_a_binary_without_it_says_so(tmp_path, monk
     _fake_qsv(
         tmp_path,
         monkeypatch,
-        "arg = sys.argv[1]\n"
-        "if arg == '--version':\n"
-        "    print('qsvlite 24.0.0-standard-16-16; (aarch64-apple-darwin compiled with Rust 1.99)')\n"
-        "elif arg == '--list':\n"
-        "    print('Installed commands (2):')\n"
-        "    print('    count       Count records')\n"
-        "    print('    stats       Infer data types')\n"
-        "else:\n"
-        "    sys.stderr.write('Invalid arguments.\\n')\n"
-        "    sys.exit(1 if arg == '--capabilities' else 2)\n",
+        "sys.stderr.write('Invalid arguments.\\n')\nsys.exit(2)\n",
+        capabilities={"binary": "qsvlite", "version": "25.0.0", "commands": ["count", "stats"]},
     )
     out = tmp_path / "qsv_dict.json"
 
@@ -177,5 +192,19 @@ async def test_describegpt_failure_on_a_binary_without_it_says_so(tmp_path, monk
 
     printed = capsys.readouterr().out
     assert "has no describegpt" in printed
-    assert "qsvlite 24.0.0" in printed
+    assert "qsvlite 25.0.0" in printed
     assert not out.exists()
+
+
+@posix_only
+async def test_too_old_qsv_returns_none_instead_of_raising(tmp_path, monkeypatch, capsys):
+    # qsv before 25.0.0 rejects --capabilities, and qsv-client refuses to run it.
+    _fake_qsv(
+        tmp_path,
+        monkeypatch,
+        "sys.stderr.write(\"Unknown flag: '--capabilities'\\n\")\nsys.exit(1)\n",
+        capabilities=None,
+    )
+
+    assert await run_qsv_count(tmp_path / "data.csv") is None
+    assert "QsvVersionError" in capsys.readouterr().out

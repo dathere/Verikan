@@ -519,7 +519,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-multipart", specifier = ">=0.0.6" },
     { name = "pyyaml", specifier = ">=6.0.0" },
-    { name = "qsv-client", specifier = ">=0.3.0" },
+    { name = "qsv-client", specifier = ">=0.4.0" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "respx", marker = "extra == 'dev'", specifier = ">=0.23.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
@@ -2188,11 +2188,11 @@ wheels = [
 
 [[package]]
 name = "qsv-client"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c4/5c/9ee10459a01b9cbeb42e58353ca0063819e05a0df340f30c5e1cb941caed/qsv_client-0.3.0.tar.gz", hash = "sha256:f6f8598fb614305e13726c7d021b70cc7b859595aea8b8c533ffc897402372a3", size = 42007, upload-time = "2026-10-10T18:17:10.593Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/1f/0861f152882257c69cf657312713eb5a5693111fe27d269217004514028d/qsv_client-0.4.0.tar.gz", hash = "sha256:dddb288aad231c9094a138c3bef6a8c37d86fa486bd37ab5cea844b3622462d0", size = 45113, upload-time = "2026-10-15T22:06:52.95Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/43/fe/54d1fbc0c9679afef699c9156daa9b75d2b16e9a40b55d94433f9e1a6af4/qsv_client-0.3.0-py3-none-any.whl", hash = "sha256:0b7ffb3faa88ce3d0dcb2bab87fe0008d2597c4285595016061ccc726dff5ba9", size = 31994, upload-time = "2026-10-10T18:17:09.338Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/95/d97697ee673f7492aa4c451920e4aef1c2de44df3203f5ad1371827384f5/qsv_client-0.4.0-py3-none-any.whl", hash = "sha256:88f90356bb87cc67a73193a70443b459a36fe4afc49fbc8a7f11f1354c333834", size = 32675, upload-time = "2026-10-15T22:06:51.49Z" },
 ]
 
 [[package]]
