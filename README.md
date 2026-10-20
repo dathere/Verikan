@@ -574,6 +574,21 @@ ignores your `.env` and a local override cannot turn it red.
 
 ---
 
+## Partners
+
+Verikan was created in collaboration with the
+[Western Pennsylvania Regional Data Center (WPRDC)](https://www.wprdc.org) at the University of
+Pittsburgh, the [City of Pittsburgh](https://www.pittsburghpa.gov), and
+[Allegheny County](https://www.alleghenycounty.us).
+
+<p align="center">
+  <a href="https://www.wprdc.org"><img src="docs/partners/pitt.png" alt="WPRDC — University of Pittsburgh" height="80"></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://www.pittsburghpa.gov"><img src="docs/partners/city-of-pittsburgh.png" alt="City of Pittsburgh" height="80"></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://www.alleghenycounty.us"><img src="docs/partners/allegheny-county.png" alt="Allegheny County" height="80"></a>
+</p>
+
 ---
 
 <div align="center">
